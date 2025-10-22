@@ -42,6 +42,8 @@ class ExperimentConfig(BaseModel):
         if image_dir.is_absolute():
             return image_dir
         settings = get_settings()
+        if settings.project_root:
+            return (settings.project_root / image_dir).resolve()
         config_path = settings.config_path.resolve()
         # assume project root is one level above config directory
         potential_root = config_path.parent

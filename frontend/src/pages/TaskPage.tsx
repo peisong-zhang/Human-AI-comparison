@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -296,6 +296,22 @@ export default function TaskPage() {
     setShowCompletionPrompt(allAnswered && onLastItem);
   }, [allAnswered, onLastItem]);
 
+  const apiBase = import.meta.env.VITE_API_BASE ?? "";
+  const resolveImageUrl = useCallback(
+    (url: string) => {
+      if (!url) {
+        return "";
+      }
+      if (/^https?:\/\//i.test(url)) {
+        return url;
+      }
+      const base = (apiBase || window.location.origin).replace(/\/$/, "");
+      const normalized = url.startsWith("/") ? url : `/${url}`;
+      return `${base}${normalized}`;
+    },
+    [apiBase]
+  );
+
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[95vw] flex-col gap-6 px-4 py-8 md:px-6 lg:px-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -360,19 +376,21 @@ export default function TaskPage() {
               className="relative mx-auto w-full max-w-full overflow-hidden rounded-2xl border border-slate-800 bg-black p-4"
               style={imageContainerStyle}
             >
-              <img
-                src={currentItem.url}
-                alt={currentItem.title}
-                className="mx-auto"
-                draggable={false}
-                style={{ width: "100%", height: "100%", objectFit: "contain" }}
-                onLoad={(event) =>
-                  setImageNaturalSize({
-                    width: event.currentTarget.naturalWidth,
-                    height: event.currentTarget.naturalHeight
-                  })
-                }
-              />
+              {currentItem && (
+                <img
+                  src={resolveImageUrl(currentItem.url)}
+                  alt={currentItem.title}
+                  className="mx-auto"
+                  draggable={false}
+                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                  onLoad={(event) =>
+                    setImageNaturalSize({
+                      width: event.currentTarget.naturalWidth,
+                      height: event.currentTarget.naturalHeight
+                    })
+                  }
+                />
+              )}
               {itemLimitMs && (
                 <div className="absolute bottom-4 left-4 w-48">
                   <div className="h-2 overflow-hidden rounded-full bg-slate-800/80">
