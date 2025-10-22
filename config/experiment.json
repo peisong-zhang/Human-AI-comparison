@@ -1,0 +1,41 @@
+{
+  "batch_id": "2025A",
+  "groups": {
+    "Senior": {
+      "name": "Senior Doctors",
+      "per_item_seconds": 60,
+      "hard_timeout": false,
+      "soft_timeout": true
+    },
+    "Junior": {
+      "name": "Junior Doctors",
+      "per_item_seconds": 75,
+      "hard_timeout": false,
+      "soft_timeout": true
+    },
+    "Student": {
+      "name": "Medical Students",
+      "per_item_seconds": 90,
+      "hard_timeout": false,
+      "soft_timeout": true
+    }
+  },
+  "modes": {
+    "A": {
+      "name": "Standard",
+      "image_dir": "data/cases/standard",
+      "task_markdown": "### Standard Evaluation\\nReview each case and decide if the presented condition is likely using the best of your clinical judgment.",
+      "guidelines_markdown": "1. Review the patient metadata.\\n2. Inspect the image carefully.\\n3. Answer Yes if the condition is present, otherwise No.",
+      "randomize": false
+    },
+    "B": {
+      "name": "AI-Human Comparison",
+      "image_dir": "data/cases/ai_human",
+      "task_markdown": "### AI-Human Comparison\\nCompare your decision against the AI suggestion shown below the image.",
+      "guidelines_markdown": "1. Consider the AI hint but rely on your own judgment.\\n2. Respond within the allotted time.\\n3. Flag the case if unsure using the Skip option.",
+      "randomize": true
+    }
+  },
+  "default_per_item_seconds": 60,
+  "allow_resume": true
+}
