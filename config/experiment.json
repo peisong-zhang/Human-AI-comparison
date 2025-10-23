@@ -1,41 +1,66 @@
 {
   "batch_id": "2025A",
-  "groups": {
-    "Senior": {
-      "name": "Senior Doctors",
-      "per_item_seconds": 60,
-      "hard_timeout": false,
-      "soft_timeout": true
+  "subsets": {
+    "A": {
+      "name": "Subset A",
+      "description": "Randomised half of the cohort",
+      "image_dirs": {
+        "human": "data/cases/subset_a/human",
+        "ai_assisted": "data/cases/subset_a/ai_assisted"
+      }
     },
-    "Junior": {
-      "name": "Junior Doctors",
-      "per_item_seconds": 75,
-      "hard_timeout": false,
-      "soft_timeout": true
-    },
-    "Student": {
-      "name": "Medical Students",
-      "per_item_seconds": 90,
-      "hard_timeout": false,
-      "soft_timeout": true
+    "B": {
+      "name": "Subset B",
+      "description": "Remaining half of the cohort",
+      "image_dirs": {
+        "human": "data/cases/subset_b/human",
+        "ai_assisted": "data/cases/subset_b/ai_assisted"
+      }
     }
   },
   "modes": {
-    "A": {
-      "name": "Standard",
-      "image_dir": "data/cases/standard",
-      "task_markdown": "### Standard Evaluation\\nReview each case and decide if the presented condition is likely using the best of your clinical judgment.",
-      "guidelines_markdown": "1. Review the patient metadata.\\n2. Inspect the image carefully.\\n3. Answer Yes if the condition is present, otherwise No.",
-      "randomize": false
+    "human": {
+      "name": "Clinician Only",
+      "task_markdown": "### Clinician Only\\nReview the case and make your decision without AI assistance.",
+      "guidelines_markdown": "1. Examine all patient information provided.\\n2. Assess the imaging carefully.\\n3. Decide if re-intubation is likely.",
+      "randomize": false,
+      "ai_enabled": false
     },
-    "B": {
-      "name": "AI-Human Comparison",
-      "image_dir": "data/cases/ai_human",
-      "task_markdown": "### AI-Human Comparison\\nCompare your decision against the AI suggestion shown below the image.",
-      "guidelines_markdown": "1. Consider the AI hint but rely on your own judgment.\\n2. Respond within the allotted time.\\n3. Flag the case if unsure using the Skip option.",
-      "randomize": true
+    "ai_assisted": {
+      "name": "Clinician + AI",
+      "task_markdown": "### Clinician + AI\\nReview the case and consider the AI-provided suggestions before making your decision.",
+      "guidelines_markdown": "1. Read the AI generated summary/hint.\\n2. Verify the findings against the imaging.\\n3. Make the final decision for re-intubation.",
+      "randomize": true,
+      "ai_enabled": true
+    }
+  },
+  "groups": {
+    "Group1": {
+      "name": "Group 1",
+      "per_item_seconds": 60,
+      "hard_timeout": false,
+      "soft_timeout": true,
+      "sequence": [
+        { "subset": "A", "mode": "human", "label": "Stage 1: Subset A (No AI)" },
+        { "subset": "B", "mode": "ai_assisted", "label": "Stage 2: Subset B (AI assisted)" }
+      ]
+    },
+    "Group2": {
+      "name": "Group 2",
+      "per_item_seconds": 60,
+      "hard_timeout": false,
+      "soft_timeout": true,
+      "sequence": [
+        { "subset": "B", "mode": "ai_assisted", "label": "Stage 1: Subset B (AI assisted)" },
+        { "subset": "A", "mode": "human", "label": "Stage 2: Subset A (No AI)" }
+      ]
     }
   },
   "default_per_item_seconds": 60,
-  "allow_resume": true
+  "allow_resume": true,
+  "participant_roles": [
+    "Senior Doctor",
+    "Junior Doctor",
+    "Medical Student"
+  ]
 }

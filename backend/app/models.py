@@ -31,6 +31,7 @@ class SessionModel(Base):
     participant_id: Mapped[str] = mapped_column(String(100), index=True)
     group_id: Mapped[str] = mapped_column(String(50), index=True)
     mode_id: Mapped[str] = mapped_column(String(50), index=True)
+    participant_role: Mapped[Optional[str]] = mapped_column(String(100))
     batch_id: Mapped[str] = mapped_column(String(50), index=True)
     started_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), default=func.now()
@@ -59,6 +60,10 @@ class ItemModel(Base):
     image_id: Mapped[str] = mapped_column(String(200))
     filename: Mapped[str] = mapped_column(String(255))
     order_index: Mapped[int] = mapped_column(Integer)
+    subset_id: Mapped[str] = mapped_column(String(50))
+    stage_index: Mapped[int] = mapped_column(Integer)
+    mode_id: Mapped[str] = mapped_column(String(50))
+    ai_hint: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
 
     session: Mapped["SessionModel"] = relationship("SessionModel", back_populates="items")
 
@@ -86,5 +91,8 @@ class RecordModel(Base):
     ts_client: Mapped[Optional[dt.datetime]] = mapped_column(DateTime(timezone=True))
     user_agent: Mapped[Optional[str]] = mapped_column(String(255))
     ip_hash: Mapped[Optional[str]] = mapped_column(String(64))
+    subset_id: Mapped[Optional[str]] = mapped_column(String(50))
+    stage_index: Mapped[Optional[int]] = mapped_column(Integer)
+    mode_id: Mapped[Optional[str]] = mapped_column(String(50))
 
     session: Mapped["SessionModel"] = relationship("SessionModel", back_populates="records")

@@ -1,5 +1,11 @@
 export type AnswerValue = "yes" | "no" | "skip" | "timeout";
 
+export interface GroupSequenceStage {
+  subset_id: string;
+  mode_id: string;
+  label?: string | null;
+}
+
 export interface GroupConfig {
   group_id: string;
   name: string;
@@ -7,34 +13,51 @@ export interface GroupConfig {
   hard_timeout: boolean;
   soft_timeout: boolean;
   quota?: number | null;
+  sequence: GroupSequenceStage[];
 }
 
-export interface ModeImage {
-  image_id: string;
-  filename: string;
-  title: string;
-  url: string;
+export interface ConfigSubset {
+  subset_id: string;
+  name: string;
+  description?: string | null;
+  case_count: number;
 }
 
 export interface ModeConfig {
   mode_id: string;
   name: string;
+  ai_enabled: boolean;
   task_markdown: string;
   guidelines_markdown: string;
-  randomize: boolean;
   per_item_seconds?: number | null;
-  images: ModeImage[];
 }
 
 export interface ConfigResponse {
   batch_id: string;
   default_per_item_seconds: number;
   allow_resume: boolean;
-  groups: GroupConfig[];
+  subsets: ConfigSubset[];
   modes: ModeConfig[];
+  groups: GroupConfig[];
+}
+
+export interface StageInfo {
+  stage_index: number;
+  subset_id: string;
+  subset_name: string;
+  mode_id: string;
+  mode_name: string;
+  label?: string | null;
+  ai_enabled: boolean;
+  task_markdown: string;
+  guidelines_markdown: string;
+  total_items: number;
 }
 
 export interface SessionItem {
+  stage_index: number;
+  subset_id: string;
+  mode_id: string;
   image_id: string;
   filename: string;
   order_index: number;
@@ -45,9 +68,9 @@ export interface SessionItem {
 export interface SessionStartResponse {
   session_id: string;
   batch_id: string;
-  mode_id: string;
   group_id: string;
   participant_id: string;
+  stages: StageInfo[];
   items: SessionItem[];
   allow_resume: boolean;
 }

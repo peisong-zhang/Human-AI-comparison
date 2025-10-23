@@ -1,16 +1,16 @@
 # Data Directory
 
-Place experiment case images inside the mode-specific folders:
+Place experiment case images in the subset + mode folders:
 
-- `data/cases/standard` &rarr; Mode `A`
-- `data/cases/ai_human` &rarr; Mode `B`
+- `data/cases/subset_a/human/` → Stage using Subset A without AI overlay
+- `data/cases/subset_a/ai_assisted/` → Subset A with AI overlay embedded in the image
+- `data/cases/subset_b/human/`
+- `data/cases/subset_b/ai_assisted/`
 
-Each image filename becomes the `image_id` used in the session (without the extension).
-Example: `patient_001.jpg` &rarr; `image_id` = `patient_001`.
+Each physical case should have matching filenames across the two modes if you want the
+same patient to appear in both stages (e.g. `case_001.jpg` in each folder). Filenames
+(without extension) become the `image_id` recorded in the database.
 
-> Tip: keep filenames URL-safe (letters, numbers, `_`, `-`) to simplify routing.
-
-You can add additional folders or update `config/experiment.json` to point at
-different directories as long as the backend container can access them. When running
-via Docker the `data/` directory is mounted automatically so new images are detected
-without rebuilding the container.
+Feel free to reorganize or add new subsets/modes—just update `config/experiment.json`
+with the correct paths. When the backend starts (or when `/api/session/start` is called),
+it scans these directories so new images are picked up automatically.

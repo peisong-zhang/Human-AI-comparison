@@ -5,7 +5,7 @@ import datetime as dt
 import io
 import random
 from collections.abc import Generator
-from typing import Annotated, Optional
+from typing import Annotated, Optional, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,18 +14,21 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from . import models
-from .config_loader import list_mode_images, load_config
+from .config_loader import list_subset_images, load_config
 from .exporter import write_csv_snapshot
 from .database import SessionLocal, engine
 from .schemas import (
     ConfigGroup,
     ConfigMode,
     ConfigResponse,
+    ConfigSubset,
+    GroupSequenceStage,
     RecordPayload,
     SessionFinishRequest,
     SessionItem,
     SessionStartRequest,
     SessionStartResponse,
+    StageInfo,
 )
 from .settings import get_settings
 from .utils import get_client_ip, hash_ip
@@ -58,41 +61,95 @@ def get_db_session() -> Generator[Session, None, None]:
 
 
 DBSession = Annotated[Session, Depends(get_db_session)]
+def _build_stage_info_from_items(
+    items: list[models.ItemModel], group_config, config
+) -> list[StageInfo]:
+    stages: dict[int, dict[str, Any]] = {}
+    for item in items:
+        stage_meta = stages.setdefault(
+            item.stage_index,
+            {
+                "subset_id": item.subset_id,
+                "mode_id": item.mode_id,
+                "count": 0,
+            },
+        )
+        stage_meta["count"] += 1
 
-
-def _ensure_mode_exists(mode_id: str) -> None:
-    config = load_config()
-    if mode_id not in config.modes:
-        raise HTTPException(status_code=404, detail=f"Mode '{mode_id}' not found")
+    stage_infos: list[StageInfo] = []
+    for stage_index, stage_config in enumerate(group_config.sequence):
+        meta = stages.get(stage_index, {"count": 0})
+        mode_cfg = config.modes[stage_config.mode]
+        subset_cfg = config.subsets[stage_config.subset]
+        stage_infos.append(
+            StageInfo(
+                stage_index=stage_index,
+                subset_id=stage_config.subset,
+                subset_name=subset_cfg.name,
+                mode_id=stage_config.mode,
+                mode_name=mode_cfg.name,
+                label=stage_config.label,
+                ai_enabled=mode_cfg.ai_enabled,
+                task_markdown=mode_cfg.task_markdown,
+                guidelines_markdown=mode_cfg.guidelines_markdown,
+                total_items=meta.get("count", 0),
+            )
+        )
+    return stage_infos
 
 
 @app.get("/api/config", response_model=ConfigResponse)
 def read_config() -> ConfigResponse:
     config = load_config()
-    groups = [
-        ConfigGroup(
-            group_id=group_id,
-            name=group_config.name,
-            per_item_seconds=group_config.per_item_seconds,
-            hard_timeout=group_config.hard_timeout,
-            soft_timeout=group_config.soft_timeout,
-            quota=group_config.quota,
+    subsets = []
+    for subset_id, subset_config in config.subsets.items():
+        mode_ids = list(subset_config.image_dirs.keys())
+        if not mode_ids:
+            case_count = 0
+        else:
+            first_mode = mode_ids[0]
+            entries = list_subset_images(subset_id, first_mode)
+            case_count = len(entries)
+        subsets.append(
+            ConfigSubset(
+                subset_id=subset_id,
+                name=subset_config.name,
+                description=subset_config.description,
+                case_count=case_count,
+            )
         )
-        for group_id, group_config in config.groups.items()
+
+    modes = [
+        ConfigMode(
+            mode_id=mode_id,
+            name=mode_config.name,
+            ai_enabled=mode_config.ai_enabled,
+            task_markdown=mode_config.task_markdown,
+            guidelines_markdown=mode_config.guidelines_markdown,
+            per_item_seconds=mode_config.per_item_seconds,
+        )
+        for mode_id, mode_config in config.modes.items()
     ]
 
-    modes = []
-    for mode_id, mode_config in config.modes.items():
-        images = list_mode_images(mode_id)
-        modes.append(
-            ConfigMode(
-                mode_id=mode_id,
-                name=mode_config.name,
-                task_markdown=mode_config.task_markdown,
-                guidelines_markdown=mode_config.guidelines_markdown,
-                randomize=mode_config.randomize,
-                per_item_seconds=mode_config.per_item_seconds,
-                images=images,
+    group_payloads = []
+    for group_id, group_config in config.groups.items():
+        sequence = [
+            GroupSequenceStage(
+                subset_id=stage.subset,
+                mode_id=stage.mode,
+                label=stage.label,
+            )
+            for stage in group_config.sequence
+        ]
+        group_payloads.append(
+            ConfigGroup(
+                group_id=group_id,
+                name=group_config.name,
+                per_item_seconds=group_config.per_item_seconds,
+                hard_timeout=group_config.hard_timeout,
+                soft_timeout=group_config.soft_timeout,
+                quota=group_config.quota,
+                sequence=sequence,
             )
         )
 
@@ -100,8 +157,10 @@ def read_config() -> ConfigResponse:
         batch_id=config.batch_id,
         default_per_item_seconds=config.default_per_item_seconds,
         allow_resume=config.allow_resume,
-        groups=groups,
+        subsets=subsets,
         modes=modes,
+        groups=group_payloads,
+        participant_roles=config.participant_roles,
     )
 
 
@@ -116,13 +175,16 @@ def start_session(
         raise HTTPException(status_code=400, detail="participant_id is required")
     if payload.group_id not in config.groups:
         raise HTTPException(status_code=400, detail="Unknown group_id")
-    if payload.mode_id not in config.modes:
-        raise HTTPException(status_code=400, detail="Unknown mode_id")
+
+    group_config = config.groups[payload.group_id]
+    if not group_config.sequence:
+        raise HTTPException(status_code=400, detail="Group has no stage sequence configured")
 
     client_ip = get_client_ip(request)
     ip_digest = hash_ip(client_ip)
     user_agent = payload.user_agent or request.headers.get("user-agent")
 
+    # Resume handling
     session_model: Optional[models.SessionModel] = None
     if config.allow_resume:
         stmt: Select[tuple[models.SessionModel]] = (
@@ -130,7 +192,6 @@ def start_session(
             .where(
                 models.SessionModel.participant_id == participant_id,
                 models.SessionModel.group_id == payload.group_id,
-                models.SessionModel.mode_id == payload.mode_id,
             )
             .order_by(models.SessionModel.started_at.desc())
         )
@@ -142,36 +203,35 @@ def start_session(
                 .order_by(models.ItemModel.order_index.asc())
                 .all()
             )
+            stage_infos = _build_stage_info_from_items(items, group_config, config)
             return SessionStartResponse(
                 session_id=session_model.session_id,
                 batch_id=session_model.batch_id,
-                mode_id=session_model.mode_id,
                 group_id=session_model.group_id,
                 participant_id=session_model.participant_id,
+                participant_role=session_model.participant_role,
+                stages=stage_infos,
                 items=[
                     SessionItem(
-                        image_id=item.image_id,
-                        filename=item.filename,
-                        title=item.image_id.replace("_", " ").title(),
-                        order_index=item.order_index,
-                        url=f"/images/{payload.mode_id}/{item.filename}",
-                    )
+                    stage_index=item.stage_index,
+                    subset_id=item.subset_id,
+                    mode_id=item.mode_id,
+                    image_id=item.image_id,
+                    filename=item.filename,
+                    title=item.image_id.replace("_", " ").title(),
+                    order_index=item.order_index,
+                    url=f"/images/subsets/{item.subset_id}/{item.mode_id}/{item.filename}",
+                )
                     for item in items
                 ],
                 allow_resume=config.allow_resume,
             )
 
-    image_entries = list_mode_images(payload.mode_id)
-    if not image_entries:
-        raise HTTPException(status_code=404, detail="No images configured for mode")
-
-    if config.modes[payload.mode_id].randomize:
-        random.shuffle(image_entries)
-
     session_model = models.SessionModel(
         participant_id=participant_id,
         group_id=payload.group_id,
-        mode_id=payload.mode_id,
+        mode_id="multi_stage",
+        participant_role=payload.participant_role,
         batch_id=config.batch_id,
         user_agent=user_agent,
         ip_hash=ip_digest,
@@ -181,31 +241,74 @@ def start_session(
 
     session_items: list[models.ItemModel] = []
     response_items: list[SessionItem] = []
-    for order_index, entry in enumerate(image_entries):
-        item = models.ItemModel(
-            session_id=session_model.session_id,
-            image_id=entry["image_id"],
-            filename=entry["filename"],
-            order_index=order_index,
-        )
-        session_items.append(item)
-        response_items.append(
-            SessionItem(
+    stage_infos: list[StageInfo] = []
+    order_index = 0
+
+    for stage_index, stage in enumerate(group_config.sequence):
+        if stage.mode not in config.modes:
+            raise HTTPException(status_code=400, detail=f"Mode '{stage.mode}' not configured")
+        if stage.subset not in config.subsets:
+            raise HTTPException(status_code=400, detail=f"Subset '{stage.subset}' not configured")
+
+        mode_config = config.modes[stage.mode]
+        subset_config = config.subsets[stage.subset]
+        entries = list_subset_images(stage.subset, stage.mode)
+        stage_random = random.Random(f"{session_model.session_id}:{stage_index}")
+        if mode_config.randomize:
+            stage_random.shuffle(entries)
+
+        if not entries:
+            raise HTTPException(status_code=404, detail=f"Subset '{stage.subset}' has no configured cases")
+
+        for entry in entries:
+            item = models.ItemModel(
+                session_id=session_model.session_id,
                 image_id=entry["image_id"],
-                filename=entry["filename"],
-                title=entry["title"],
+                filename=entry["relative_path"],
                 order_index=order_index,
-                url=entry["url"],
+                subset_id=stage.subset,
+                stage_index=stage_index,
+                mode_id=stage.mode,
+            )
+            session_items.append(item)
+            response_items.append(
+                SessionItem(
+                    stage_index=stage_index,
+                    subset_id=stage.subset,
+                    mode_id=stage.mode,
+                    image_id=entry["image_id"],
+                    filename=entry["relative_path"],
+                    title=entry["title"],
+                    order_index=order_index,
+                    url=entry["url"],
+                )
+            )
+            order_index += 1
+
+        stage_infos.append(
+            StageInfo(
+                stage_index=stage_index,
+                subset_id=stage.subset,
+                subset_name=subset_config.name,
+                mode_id=stage.mode,
+                mode_name=mode_config.name,
+                label=stage.label,
+                ai_enabled=mode_config.ai_enabled,
+                task_markdown=mode_config.task_markdown,
+                guidelines_markdown=mode_config.guidelines_markdown,
+                total_items=len(entries),
             )
         )
+
     db.add_all(session_items)
 
     return SessionStartResponse(
         session_id=session_model.session_id,
         batch_id=session_model.batch_id,
-        mode_id=session_model.mode_id,
         group_id=session_model.group_id,
         participant_id=session_model.participant_id,
+        participant_role=session_model.participant_role,
+        stages=stage_infos,
         items=response_items,
         allow_resume=config.allow_resume,
     )
@@ -253,6 +356,9 @@ def record_response(
         record_model.ts_client = payload.ts_client
         record_model.user_agent = user_agent
         record_model.ip_hash = ip_digest
+        record_model.subset_id = item_model.subset_id
+        record_model.stage_index = item_model.stage_index
+        record_model.mode_id = item_model.mode_id
     else:
         record_model = models.RecordModel(
             session_id=payload.session_id,
@@ -266,14 +372,18 @@ def record_response(
             ts_client=payload.ts_client,
             user_agent=user_agent,
             ip_hash=ip_digest,
+            subset_id=item_model.subset_id,
+            stage_index=item_model.stage_index,
+            mode_id=item_model.mode_id,
         )
         db.add(record_model)
 
     write_csv_snapshot(
         db,
         participant_id=session_model.participant_id,
-        mode_id=session_model.mode_id,
+        mode_id=item_model.mode_id,
         session_id=session_model.session_id,
+        group_id=session_model.group_id,
     )
 
     return JSONResponse({"status": "ok"})
@@ -296,8 +406,9 @@ def finish_session(payload: SessionFinishRequest, db: DBSession) -> JSONResponse
     write_csv_snapshot(
         db,
         participant_id=session_model.participant_id,
-        mode_id=session_model.mode_id,
+        mode_id=None,
         session_id=session_model.session_id,
+        group_id=session_model.group_id,
     )
 
     return JSONResponse({"status": "ok"})
@@ -318,7 +429,7 @@ def export_csv(
     if group_id:
         stmt = stmt.where(models.SessionModel.group_id == group_id)
     if mode_id:
-        stmt = stmt.where(models.SessionModel.mode_id == mode_id)
+        stmt = stmt.where(models.RecordModel.mode_id == mode_id)
     if session_id:
         stmt = stmt.where(models.SessionModel.session_id == session_id)
 
@@ -333,8 +444,10 @@ def export_csv(
             "session_id",
             "participant_id",
             "group_id",
-            "mode_id",
             "batch_id",
+            "mode_id",
+            "stage_index",
+            "subset_id",
             "image_id",
             "answer",
             "order_index",
@@ -361,8 +474,10 @@ def export_csv(
                     session_model.session_id,
                     session_model.participant_id,
                     session_model.group_id,
-                    session_model.mode_id,
                     session_model.batch_id,
+                    record_model.mode_id,
+                    record_model.stage_index,
+                    record_model.subset_id,
                     record_model.image_id,
                     record_model.answer,
                     record_model.order_index,
@@ -390,13 +505,16 @@ def export_csv(
     )
 
 
-@app.get("/images/{mode_id}/{filename}")
-def serve_image(mode_id: str, filename: str) -> FileResponse:
+@app.get("/images/subsets/{subset_id}/{mode_id}/{path:path}")
+def serve_subset_image(subset_id: str, mode_id: str, path: str) -> FileResponse:
     config = load_config()
-    if mode_id not in config.modes:
-        raise HTTPException(status_code=404, detail="Unknown mode")
-    images_dir = config.resolve_image_dir(mode_id)
-    file_path = (images_dir / filename).resolve()
+    if subset_id not in config.subsets:
+        raise HTTPException(status_code=404, detail="Unknown subset")
+    try:
+        images_dir = config.resolve_image_dir(subset_id, mode_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown mode for subset") from exc
+    file_path = (images_dir / path).resolve()
 
     try:
         file_path.relative_to(images_dir.resolve())

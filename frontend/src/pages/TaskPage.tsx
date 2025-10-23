@@ -49,6 +49,7 @@ export default function TaskPage() {
     }
   }, [session, config, navigate]);
 
+  const stages = session?.stages ?? [];
   const items = session?.items ?? [];
 
   useEffect(() => {
@@ -77,10 +78,16 @@ export default function TaskPage() {
     return config.groups.find((group) => group.group_id === session.group_id);
   }, [config, session]);
 
+  const currentItem: SessionItem | undefined = items[currentIndex];
+  const currentStage = useMemo(() => {
+    if (!currentItem) return undefined;
+    return stages.find((stage) => stage.stage_index === currentItem.stage_index);
+  }, [stages, currentItem]);
+
   const modeConfig = useMemo(() => {
-    if (!config || !session) return undefined;
-    return config.modes.find((mode) => mode.mode_id === session.mode_id);
-  }, [config, session]);
+    if (!config || !currentStage) return undefined;
+    return config.modes.find((mode) => mode.mode_id === currentStage.mode_id);
+  }, [config, currentStage]);
 
   const perItemSeconds = useMemo(() => {
     if (!config) return undefined;
@@ -95,11 +102,33 @@ export default function TaskPage() {
   const hardTimeout = groupConfig?.hard_timeout ?? false;
   const softTimeout = groupConfig?.soft_timeout ?? true;
 
-  const currentItem: SessionItem | undefined = items[currentIndex];
   const totalItems = items.length;
   const completedCount = Object.keys(responses).length;
   const progressValue = totalItems ? currentIndex + 1 : 0;
   const currentResponse = currentItem ? responses[currentItem.image_id] : undefined;
+
+  const stageStats = useMemo(() => {
+    const counts: number[] = Array.from({ length: stages.length }, () => 0);
+    items.forEach((item) => {
+      if (typeof counts[item.stage_index] === "number") {
+        counts[item.stage_index] += 1;
+      }
+    });
+    const starts: number[] = [];
+    counts.reduce((acc, count, idx) => {
+      starts[idx] = acc;
+      return acc + count;
+    }, 0);
+    return { counts, starts };
+  }, [stages, items]);
+
+  const currentStageIndex = currentItem?.stage_index ?? 0;
+  const currentStageCount = stageStats.counts[currentStageIndex] ?? 0;
+  const currentStageStart = stageStats.starts[currentStageIndex] ?? 0;
+  const currentStagePosition = Math.max(0, currentIndex - currentStageStart);
+  const stageTotalItems = currentStage?.total_items ?? currentStageCount;
+  const stageDisplayTotal = stageTotalItems > 0 ? stageTotalItems : currentStageCount;
+  const stageDisplayIndex = stageDisplayTotal > 0 ? currentStagePosition + 1 : 0;
 
   const unansweredItems = useMemo(() => {
     if (!session) return [];
@@ -317,12 +346,17 @@ export default function TaskPage() {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h2 className="text-2xl font-semibold text-white">
-            Case {progressValue} of {totalItems}
+            {currentStage ? currentStage.label ?? `Stage ${currentStage.stage_index + 1}: ${currentStage.mode_name}` : "Study Stage"}
           </h2>
           <p className="text-sm text-slate-300">
-            Participant {session?.participant_id} · Mode {session?.mode_id} · Group{" "}
-            {session?.group_id}
+            Participant {session?.participant_id}
+            {session?.participant_role ? ` (${session.participant_role})` : ""} · Group {session?.group_id} · Case {progressValue} / {totalItems}
           </p>
+          {currentStage && (
+            <p className="text-xs text-slate-400">
+              Subset {currentStage.subset_name} · Stage item {stageDisplayIndex} / {stageDisplayTotal}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-3">
           <TimerDisplay label="Global Timer" value={formatDuration(globalElapsed)} />
@@ -344,10 +378,10 @@ export default function TaskPage() {
         </div>
       </div>
 
-      {config && modeConfig && (
+      {currentStage && (
         <GuidelinePanel
-          taskMarkdown={modeConfig.task_markdown}
-          guidelinesMarkdown={modeConfig.guidelines_markdown}
+          taskMarkdown={currentStage.task_markdown}
+          guidelinesMarkdown={currentStage.guidelines_markdown}
         />
       )}
 
@@ -358,18 +392,23 @@ export default function TaskPage() {
               <div className="flex flex-col gap-2 text-slate-200 lg:flex-row lg:items-center lg:justify-between">
                 <div className="text-base font-semibold">{currentItem.title}</div>
                 <div className="text-xs uppercase tracking-wide text-slate-400">
-                  {currentIndex + 1} / {totalItems}
+                  Overall {progressValue} / {totalItems}
                 </div>
               </div>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                 <div className="w-full lg:flex-1">
-                  <ProgressBar current={currentIndex + 1} total={totalItems} />
+                  <ProgressBar current={stageDisplayIndex} total={stageDisplayTotal || 1} />
                 </div>
-                {perItemSeconds && (
-                  <div className="text-xs text-slate-400">
-                    Limit: {perItemSeconds}s {hardTimeout ? "(auto)" : softTimeout ? "(soft)" : ""}
+                <div className="space-y-1 text-xs text-slate-400">
+                  <div>
+                    Stage progress: {stageDisplayIndex} / {stageDisplayTotal || 0}
                   </div>
-                )}
+                  {perItemSeconds && (
+                    <div>
+                      Limit: {perItemSeconds}s {hardTimeout ? "(auto)" : softTimeout ? "(soft)" : ""}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             <div
@@ -420,6 +459,11 @@ export default function TaskPage() {
                   {showCompletionPrompt && (
                     <div className="rounded-md border border-emerald-500/50 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 text-center">
                       All cases are answered. Select <span className="font-semibold">Complete Session</span> to submit your results.
+                    </div>
+                  )}
+                  {currentStage && (
+                    <div className="text-xs text-slate-400 text-center">
+                      Stage {currentStage.stage_index + 1}: {currentStage.label ?? `${currentStage.mode_name} · ${currentStage.subset_name}`}
                     </div>
                   )}
                   <div className="flex justify-between text-xs text-slate-400">
@@ -476,6 +520,12 @@ export default function TaskPage() {
                   <>
                     <div className="font-semibold text-slate-100">Response saved</div>
                     <dl className="mt-3 space-y-2 text-xs">
+                      {currentStage && (
+                        <div className="flex justify-between">
+                          <dt>Stage</dt>
+                          <dd>{currentStage.label ?? `${currentStage.mode_name} · ${currentStage.subset_name}`}</dd>
+                        </div>
+                      )}
                       <div className="flex justify-between">
                         <dt>Answer</dt>
                         <dd className="capitalize">{currentResponse.answer}</dd>

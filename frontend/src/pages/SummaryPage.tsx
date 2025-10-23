@@ -46,6 +46,19 @@ export default function SummaryPage() {
     return Math.round(times.reduce((sum, value) => sum + value, 0) / times.length);
   }, [responseList]);
 
+  const stageBreakdown = useMemo(() => {
+    if (!session) return [];
+    return session.stages.map((stage) => {
+      const itemsInStage = responseList.filter((item) => item.stage_index === stage.stage_index);
+      const answered = itemsInStage.filter((item) => responses[item.image_id]).length;
+      return {
+        stage,
+        total: itemsInStage.length,
+        answered
+      };
+    });
+  }, [session, responseList, responses]);
+
   const handleDownload = async () => {
     if (!session) return;
     try {
@@ -80,9 +93,18 @@ export default function SummaryPage() {
       <header className="mb-8">
         <h1 className="text-3xl font-semibold text-white">Session Summary</h1>
         <p className="mt-2 text-sm text-slate-300">
-          Participant {session.participant_id} · Mode {session.mode_id} · Group{" "}
-          {session.group_id}
+          Participant {session.participant_id}
+          {session.participant_role ? ` (${session.participant_role})` : ""} · Group {session.group_id}
         </p>
+        {stageBreakdown.length > 0 && (
+          <ul className="mt-2 space-y-1 text-xs text-slate-400">
+            {stageBreakdown.map(({ stage, total, answered }) => (
+              <li key={stage.stage_index}>
+                Stage {stage.stage_index + 1}: {stage.label ?? `${stage.mode_name} · ${stage.subset_name}`} · {answered}/{total} answered
+              </li>
+            ))}
+          </ul>
+        )}
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -101,6 +123,9 @@ export default function SummaryPage() {
             <thead className="bg-slate-900/60 text-xs uppercase text-slate-400">
               <tr>
                 <th className="px-4 py-2 text-left font-medium">Order</th>
+                <th className="px-4 py-2 text-left font-medium">Stage</th>
+                <th className="px-4 py-2 text-left font-medium">Subset</th>
+                <th className="px-4 py-2 text-left font-medium">Mode</th>
                 <th className="px-4 py-2 text-left font-medium">Case</th>
                 <th className="px-4 py-2 text-left font-medium">Answer</th>
                 <th className="px-4 py-2 text-left font-medium">Item Time</th>
@@ -111,6 +136,9 @@ export default function SummaryPage() {
               {responseList.map((item) => (
                 <tr key={item.image_id} className="hover:bg-slate-900/60">
                   <td className="px-4 py-2 text-slate-400">{item.order_index + 1}</td>
+                  <td className="px-4 py-2 text-slate-400">Stage {item.stage_index + 1}</td>
+                  <td className="px-4 py-2 text-slate-200">{session.stages[item.stage_index]?.subset_name ?? item.subset_id}</td>
+                  <td className="px-4 py-2 text-slate-200">{session.stages[item.stage_index]?.mode_name ?? item.mode_id}</td>
                   <td className="px-4 py-2">{item.title}</td>
                   <td className="px-4 py-2 capitalize">
                     {item.response?.answer ?? "—"}

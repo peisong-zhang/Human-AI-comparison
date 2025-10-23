@@ -56,12 +56,17 @@ requests to the backend running on port 8000.
 ---
 
 ## Configuration & Data
-- Application settings live in `config/experiment.json`. Adjust modes, groups, timeouts, or markdown
-  instructions here.
-- Place case images inside `data/cases/<mode>/`. Filenames (without extension) become `image_id`s.
-- Update the JSON config if you introduce new modes or relocate image directories.
+- Application settings live in `config/experiment.json`. Define subsets、multi-stage group sequences、
+  参与者角色列表、时间限制以及指南文案都在这里配置。
+- Place case images inside the subset directories (e.g. `data/cases/subset_a/`, `data/cases/subset_b/`).
+  Filenames (without extension) become `image_id`s. When AI interpretation is needed, bake the
+  overlay/text into the image itself—no separate hint files are required.
+- Update the JSON config if you introduce new modes, subsets, or relocate image directories.
 - On startup the backend generates/updates `backend/app/experiment.db` (SQLite).
-- Every response (and session finish) automatically writes CSV exports under `exports/records_<participant>_<mode>.csv`; override the base name with `EXPERIMENT_AUTO_EXPORT_FILENAME`, directory with `EXPERIMENT_AUTO_EXPORT_DIR`, or disable via `EXPERIMENT_AUTO_EXPORT_ENABLED=false`.
+- Every response (and session finish) automatically writes CSV exports under
+  `exports/records_<participant>_<mode>.csv` and a consolidated `records_<participant>.csv`. Override
+  the base name with `EXPERIMENT_AUTO_EXPORT_FILENAME`, directory with `EXPERIMENT_AUTO_EXPORT_DIR`,
+  or disable via `EXPERIMENT_AUTO_EXPORT_ENABLED=false`.
 
 ---
 
@@ -69,7 +74,7 @@ requests to the backend running on port 8000.
 | Endpoint | Method | Description |
 | --- | --- | --- |
 | `/api/config` | GET | Returns experiment configuration and image manifest. |
-| `/api/session/start` | POST | Starts or resumes a participant session (payload: participant_id, group_id, mode_id). |
+| `/api/session/start` | POST | Starts or resumes a participant session (payload: participant_id, group_id). |
 | `/api/record` | POST | Records a single response with timestamps and metadata. |
 | `/api/session/finish` | POST | Marks the session as complete, storing total elapsed time. |
 | `/api/export/csv` | GET | Streams CSV of records (optional filters: `group_id`, `mode_id`, `session_id`). |

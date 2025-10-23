@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { startSession as apiStartSession } from "../api/client";
 import { useSession } from "../context/SessionContext";
-import { ModeConfig } from "../types";
+import { GroupConfig } from "../types";
 
 interface FormState {
   participant_id: string;
   group_id: string;
-  mode_id: string;
+  participant_role: string;
 }
 
 export default function LoginPage() {
@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [form, setForm] = useState<FormState>({
     participant_id: "",
     group_id: "",
-    mode_id: ""
+    participant_role: ""
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,18 +30,18 @@ export default function LoginPage() {
   useEffect(() => {
     if (!config) return;
     const defaultGroup = config.groups[0]?.group_id ?? "";
-    const defaultMode = config.modes[0]?.mode_id ?? "";
+    const defaultRole = config.participant_roles[0] ?? "";
     setForm((prev) => ({
       participant_id: prev.participant_id,
       group_id: prev.group_id || defaultGroup,
-      mode_id: prev.mode_id || defaultMode
+      participant_role: prev.participant_role || defaultRole
     }));
   }, [config]);
 
-  const selectedMode: ModeConfig | undefined = useMemo(() => {
+  const selectedGroup: GroupConfig | undefined = useMemo(() => {
     if (!config) return undefined;
-    return config.modes.find((mode) => mode.mode_id === form.mode_id);
-  }, [config, form.mode_id]);
+    return config.groups.find((group) => group.group_id === form.group_id);
+  }, [config, form.group_id]);
 
   const handleChange = (field: keyof FormState, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -59,7 +59,8 @@ export default function LoginPage() {
       const sessionData = await apiStartSession({
         participant_id: form.participant_id.trim(),
         group_id: form.group_id,
-        mode_id: form.mode_id
+        participant_role: form.participant_role,
+        user_agent: window.navigator.userAgent
       });
       startSession(sessionData);
       navigate("/task");
@@ -98,7 +99,7 @@ export default function LoginPage() {
                 placeholder="e.g. P12345"
               />
             </div>
-            <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium text-slate-200">
                   Participant Group
@@ -116,29 +117,38 @@ export default function LoginPage() {
                 </select>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-200">Mode</label>
+                <label className="text-sm font-medium text-slate-200">
+                  Participant Role
+                </label>
                 <select
-                  value={form.mode_id}
-                  onChange={(event) => handleChange("mode_id", event.target.value)}
+                  value={form.participant_role}
+                  onChange={(event) => handleChange("participant_role", event.target.value)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-base text-slate-100 focus:border-primary focus:outline-none"
                 >
-                  {config.modes.map((mode) => (
-                    <option key={mode.mode_id} value={mode.mode_id}>
-                      {mode.name}
+                  {config.participant_roles.map((role) => (
+                    <option key={role} value={role}>
+                      {role}
                     </option>
                   ))}
                 </select>
               </div>
             </div>
-            {selectedMode && (
+            {selectedGroup && (
               <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
-                <div className="font-semibold text-slate-100">
-                  {selectedMode.name}
-                </div>
-                <p className="mt-1">
-                  Images: {selectedMode.images.length} | Randomized:{" "}
-                  {selectedMode.randomize ? "Yes" : "No"}
-                </p>
+                <div className="font-semibold text-slate-100">{selectedGroup.name}</div>
+                <p className="mt-1 text-xs text-slate-400">Role selected: {form.participant_role || "—"}</p>
+                <ul className="mt-2 space-y-2 text-xs text-slate-400">
+                  {selectedGroup.sequence.map((stage, idx) => {
+                    const mode = config.modes.find((m) => m.mode_id === stage.mode_id);
+                    const subset = config.subsets.find((s) => s.subset_id === stage.subset_id);
+                    const label = stage.label ?? `${mode?.name ?? stage.mode_id} · ${subset?.name ?? stage.subset_id}`;
+                    return (
+                      <li key={`${stage.mode_id}-${stage.subset_id}-${idx}`}>
+                        <span className="font-semibold text-slate-100">Stage {idx + 1}:</span> {label}
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
             {error && <p className="text-sm text-rose-400">{error}</p>}

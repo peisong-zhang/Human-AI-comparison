@@ -68,12 +68,14 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (!raw) return;
     try {
       const parsed = JSON.parse(raw) as PersistedState;
-      if (parsed.session) {
+      if (parsed.session && Array.isArray((parsed.session as SessionStartResponse).stages)) {
         setSession(parsed.session);
         setResponses(parsed.responses ?? {});
         setCurrentIndex(parsed.currentIndex ?? 0);
         setGlobalStart(parsed.globalStart ?? Date.now());
         setItemStart(parsed.itemStart ?? Date.now());
+      } else {
+        window.localStorage.removeItem(STORAGE_KEY);
       }
     } catch (error) {
       console.warn("Failed to parse persisted session state", error);

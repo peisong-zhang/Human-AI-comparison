@@ -15,8 +15,11 @@ from .settings import get_settings
 CSV_HEADER = [
     "session_id",
     "participant_id",
+    "participant_role",
     "group_id",
     "mode_id",
+    "stage_index",
+    "subset_id",
     "batch_id",
     "image_id",
     "answer",
@@ -41,6 +44,7 @@ def iter_records(
     session_id: Optional[str] = None,
     participant_id: Optional[str] = None,
     mode_id: Optional[str] = None,
+    group_id: Optional[str] = None,
 ) -> Iterable[Tuple[models.RecordModel, models.SessionModel]]:
     stmt = (
         select(models.RecordModel, models.SessionModel)
@@ -59,6 +63,8 @@ def iter_records(
         stmt = stmt.where(models.SessionModel.participant_id == participant_id)
     if mode_id:
         stmt = stmt.where(models.SessionModel.mode_id == mode_id)
+    if group_id:
+        stmt = stmt.where(models.SessionModel.group_id == group_id)
     yield from session.execute(stmt)
 
 
@@ -74,6 +80,7 @@ def write_csv_snapshot(
     participant_id: Optional[str] = None,
     mode_id: Optional[str] = None,
     session_id: Optional[str] = None,
+    group_id: Optional[str] = None,
 ) -> None:
     settings = get_settings()
     if not settings.auto_export_enabled:
@@ -87,14 +94,8 @@ def write_csv_snapshot(
     parts = [stem]
     if participant_id:
         parts.append(_sanitize(participant_id))
-    if mode_id:
-        config = load_config()
-        mode_label = None
-        if mode_id in config.modes:
-            mode_label = config.modes[mode_id].name
-        else:
-            mode_label = mode_id
-        parts.append(_sanitize(mode_label))
+    if group_id:
+        parts.append(_sanitize(group_id))
     filename = "_".join(filter(None, parts)) + suffix
     file_path = export_dir / filename
 
@@ -108,13 +109,17 @@ def write_csv_snapshot(
             session_id=session_id,
             participant_id=participant_id,
             mode_id=mode_id,
+            group_id=group_id,
         ):
             writer.writerow(
                 [
                     session_model.session_id,
                     session_model.participant_id,
+                    session_model.participant_role or "",
                     session_model.group_id,
                     session_model.mode_id,
+                    record_model.stage_index,
+                    record_model.subset_id,
                     session_model.batch_id,
                     record_model.image_id,
                     record_model.answer,
