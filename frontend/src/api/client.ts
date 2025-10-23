@@ -35,7 +35,16 @@ export async function finishSession(
   session_id: string,
   total_elapsed_ms: number
 ): Promise<void> {
-  await api.post("/api/session/finish", { session_id, total_elapsed_ms });
+  try {
+    await api.post("/api/session/finish", { session_id, total_elapsed_ms });
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response?.status === 404) {
+      // Treat missing session as already finished to avoid blocking the user
+      console.warn("Session not found during finish; treating as already completed.");
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function downloadCsv(
