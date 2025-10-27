@@ -57,10 +57,5 @@
     }
   },
   "default_per_item_seconds": 60,
-  "allow_resume": true,
-  "participant_roles": [
-    "Senior Doctor",
-    "Junior Doctor",
-    "Medical Student"
-  ]
+  "allow_resume": true
 }

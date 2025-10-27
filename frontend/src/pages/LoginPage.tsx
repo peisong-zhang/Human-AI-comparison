@@ -7,7 +7,6 @@ import { GroupConfig } from "../types";
 interface FormState {
   participant_id: string;
   group_id: string;
-  participant_role: string;
 }
 
 export default function LoginPage() {
@@ -15,8 +14,7 @@ export default function LoginPage() {
   const { config, loadingConfig, session, startSession } = useSession();
   const [form, setForm] = useState<FormState>({
     participant_id: "",
-    group_id: "",
-    participant_role: ""
+    group_id: ""
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -30,11 +28,9 @@ export default function LoginPage() {
   useEffect(() => {
     if (!config) return;
     const defaultGroup = config.groups[0]?.group_id ?? "";
-    const defaultRole = config.participant_roles[0] ?? "";
     setForm((prev) => ({
       participant_id: prev.participant_id,
-      group_id: prev.group_id || defaultGroup,
-      participant_role: prev.participant_role || defaultRole
+      group_id: prev.group_id || defaultGroup
     }));
   }, [config]);
 
@@ -59,7 +55,6 @@ export default function LoginPage() {
       const sessionData = await apiStartSession({
         participant_id: form.participant_id.trim(),
         group_id: form.group_id,
-        participant_role: form.participant_role,
         user_agent: window.navigator.userAgent
       });
       startSession(sessionData);
@@ -99,44 +94,25 @@ export default function LoginPage() {
                 placeholder="e.g. P12345"
               />
             </div>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-200">
-                  Participant Group
-                </label>
-                <select
-                  value={form.group_id}
-                  onChange={(event) => handleChange("group_id", event.target.value)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-base text-slate-100 focus:border-primary focus:outline-none"
-                >
-                  {config.groups.map((group) => (
-                    <option key={group.group_id} value={group.group_id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-slate-200">
-                  Participant Role
-                </label>
-                <select
-                  value={form.participant_role}
-                  onChange={(event) => handleChange("participant_role", event.target.value)}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-base text-slate-100 focus:border-primary focus:outline-none"
-                >
-                  {config.participant_roles.map((role) => (
-                    <option key={role} value={role}>
-                      {role}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-200">
+                Participant Group
+              </label>
+              <select
+                value={form.group_id}
+                onChange={(event) => handleChange("group_id", event.target.value)}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-base text-slate-100 focus:border-primary focus:outline-none"
+              >
+                {config.groups.map((group) => (
+                  <option key={group.group_id} value={group.group_id}>
+                    {group.name}
+                  </option>
+                ))}
+              </select>
             </div>
             {selectedGroup && (
               <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
                 <div className="font-semibold text-slate-100">{selectedGroup.name}</div>
-                <p className="mt-1 text-xs text-slate-400">Role selected: {form.participant_role || "—"}</p>
                 <ul className="mt-2 space-y-2 text-xs text-slate-400">
                   {selectedGroup.sequence.map((stage, idx) => {
                     const mode = config.modes.find((m) => m.mode_id === stage.mode_id);

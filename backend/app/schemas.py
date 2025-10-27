@@ -45,14 +45,12 @@ class ConfigResponse(BaseModel):
     subsets: list[ConfigSubset]
     modes: list[ConfigMode]
     groups: list[ConfigGroup]
-    participant_roles: list[str]
 
 
 class SessionStartRequest(BaseModel):
     participant_id: str = Field(min_length=1, max_length=100)
     group_id: str
     user_agent: Optional[str] = None
-    participant_role: Optional[str] = None
 
 
 class StageInfo(BaseModel):
@@ -84,7 +82,6 @@ class SessionStartResponse(BaseModel):
     batch_id: str
     group_id: str
     participant_id: str
-    participant_role: Optional[str]
     stages: list[StageInfo]
     items: list[SessionItem]
     allow_resume: bool

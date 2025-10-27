@@ -56,8 +56,8 @@ requests to the backend running on port 8000.
 ---
 
 ## Configuration & Data
-- Application settings live in `config/experiment.json`. Define subsets、multi-stage group sequences、
-  参与者角色列表、时间限制以及指南文案都在这里配置。
+- Application settings live in `config/experiment.json`. Define subsets, multi-stage group sequences,
+  timing rules, and markdown instructions here.
 - Place case images inside the subset directories (e.g. `data/cases/subset_a/`, `data/cases/subset_b/`).
   Filenames (without extension) become `image_id`s. When AI interpretation is needed, bake the
   overlay/text into the image itself—no separate hint files are required.

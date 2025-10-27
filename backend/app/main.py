@@ -160,7 +160,6 @@ def read_config() -> ConfigResponse:
         subsets=subsets,
         modes=modes,
         groups=group_payloads,
-        participant_roles=config.participant_roles,
     )
 
 
@@ -209,7 +208,6 @@ def start_session(
                 batch_id=session_model.batch_id,
                 group_id=session_model.group_id,
                 participant_id=session_model.participant_id,
-                participant_role=session_model.participant_role,
                 stages=stage_infos,
                 items=[
                     SessionItem(
@@ -231,7 +229,6 @@ def start_session(
         participant_id=participant_id,
         group_id=payload.group_id,
         mode_id="multi_stage",
-        participant_role=payload.participant_role,
         batch_id=config.batch_id,
         user_agent=user_agent,
         ip_hash=ip_digest,
@@ -307,7 +304,6 @@ def start_session(
         batch_id=session_model.batch_id,
         group_id=session_model.group_id,
         participant_id=session_model.participant_id,
-        participant_role=session_model.participant_role,
         stages=stage_infos,
         items=response_items,
         allow_resume=config.allow_resume,
@@ -383,7 +379,6 @@ def record_response(
         participant_id=session_model.participant_id,
         mode_id=item_model.mode_id,
         session_id=session_model.session_id,
-        group_id=session_model.group_id,
     )
 
     return JSONResponse({"status": "ok"})
@@ -408,7 +403,6 @@ def finish_session(payload: SessionFinishRequest, db: DBSession) -> JSONResponse
         participant_id=session_model.participant_id,
         mode_id=None,
         session_id=session_model.session_id,
-        group_id=session_model.group_id,
     )
 
     return JSONResponse({"status": "ok"})

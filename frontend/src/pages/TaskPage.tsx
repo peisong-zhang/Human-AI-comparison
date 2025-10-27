@@ -349,8 +349,7 @@ export default function TaskPage() {
             {currentStage ? currentStage.label ?? `Stage ${currentStage.stage_index + 1}: ${currentStage.mode_name}` : "Study Stage"}
           </h2>
           <p className="text-sm text-slate-300">
-            Participant {session?.participant_id}
-            {session?.participant_role ? ` (${session.participant_role})` : ""} · Group {session?.group_id} · Case {progressValue} / {totalItems}
+            Participant {session?.participant_id} · Group {session?.group_id} · Case {progressValue} / {totalItems}
           </p>
           {currentStage && (
             <p className="text-xs text-slate-400">

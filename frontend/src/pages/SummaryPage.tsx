@@ -93,8 +93,7 @@ export default function SummaryPage() {
       <header className="mb-8">
         <h1 className="text-3xl font-semibold text-white">Session Summary</h1>
         <p className="mt-2 text-sm text-slate-300">
-          Participant {session.participant_id}
-          {session.participant_role ? ` (${session.participant_role})` : ""} · Group {session.group_id}
+          Participant {session.participant_id} · Group {session.group_id}
         </p>
         {stageBreakdown.length > 0 && (
           <ul className="mt-2 space-y-1 text-xs text-slate-400">

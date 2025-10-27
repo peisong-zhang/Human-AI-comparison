@@ -47,7 +47,6 @@ class ExperimentConfig(BaseModel):
     subsets: dict[str, SubsetConfig]
     default_per_item_seconds: int = Field(default=60, ge=1)
     allow_resume: bool = True
-    participant_roles: list[str] = Field(default_factory=list)
 
     def resolve_image_dir(self, subset_id: str, mode_id: str) -> Path:
         subset = self.subsets[subset_id]
