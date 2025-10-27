@@ -6,8 +6,8 @@ interface GuidelinePanelProps {
   guidelinesMarkdown: string;
 }
 
-const PANEL_WIDTH = 420;
-const PANEL_HEIGHT = 360;
+const PANEL_WIDTH = 520;
+const PANEL_HEIGHT = 560;
 const BOUNDARY_PADDING = 20;
 
 export default function GuidelinePanel({
@@ -120,7 +120,7 @@ export default function GuidelinePanel({
                 </button>
               </div>
             </div>
-            <div className="max-h-[60vh] overflow-y-auto px-5 py-4 text-sm leading-relaxed text-slate-100">
+            <div className="max-h-[80vh] overflow-y-auto px-6 py-5 text-sm leading-relaxed text-slate-100">
               <section className="space-y-3">
                 <h3 className="text-base font-semibold text-primary">Task Description</h3>
                 <ReactMarkdown className="prose prose-invert max-w-none">

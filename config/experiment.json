@@ -21,15 +21,15 @@
   "modes": {
     "human": {
       "name": "Clinician Only",
-      "task_markdown": "### Clinician Only\\nReview the case and make your decision without AI assistance.",
-      "guidelines_markdown": "1. Examine all patient information provided.\\n2. Assess the imaging carefully.\\n3. Decide if re-intubation is likely.",
+      "task_markdown": "### Task Background\nEach figure summarises an ICU patient’s last several hours, including physiological trends and treatments. You will see:\n\n- Heart Rate (HR)\n- Mean Arterial Pressure (MAP)\n- Respiratory Rate (RR)\n- PaCO₂\n- Tidal Volume (Vt)\n- PaO₂/FiO₂\n\nGreen bars indicate mechanical ventilation (Vent). Blue, red, and purple bars represent No Vent (None), Vasopressor use (Vaso), and Both Vent + Vaso respectively. Patient age, sex, and primary diagnosis (e.g. CHF, MI) are listed above the plot.\n\n### Clinical Task\nDetermine whether the patient will require re-intubation (restart of mechanical ventilation) within the next 6 hours. Base your decision on:\n\n- Respiratory patterns (RR, PaO₂/FiO₂, PaCO₂, tidal volume)\n- Cardiovascular stability (HR, MAP)\n- Treatment interventions and their duration\n- Patient background information\n\nThis condition is **without AI assistance**—rely solely on the figure and your clinical judgement.",
+      "guidelines_markdown": "1. Review all panels, paying particular attention to recent respiratory trends.\n2. Consider hemodynamic stability and recent interventions (Vent, Vaso, Both).\n3. Integrate patient demographic/diagnostic information.\n4. Decide whether re-intubation within 6 hours is likely (choose ✅) or unlikely (choose ❌).",
       "randomize": false,
       "ai_enabled": false
     },
     "ai_assisted": {
       "name": "Clinician + AI",
-      "task_markdown": "### Clinician + AI\\nReview the case and consider the AI-provided suggestions before making your decision.",
-      "guidelines_markdown": "1. Read the AI generated summary/hint.\\n2. Verify the findings against the imaging.\\n3. Make the final decision for re-intubation.",
+      "task_markdown": "### Task Background\nEach figure summarises an ICU patient’s last several hours, including physiological trends and treatments:\n\n- Heart Rate (HR)\n- Mean Arterial Pressure (MAP)\n- Respiratory Rate (RR)\n- PaCO₂\n- Tidal Volume (Vt)\n- PaO₂/FiO₂\n\nTreatment bars: green = Vent, blue = None, red = Vaso, purple = Both Vent + Vaso. Patient age/sex/primary diagnosis are shown above the plot.\n\n### Clinical Task\nDecide whether the patient will need re-intubation within 6 hours, considering respiratory trends, hemodynamics, treatment history, and patient background.\n\n### AI-Assisted Mode\nYou will see the model’s prediction (✅/❌) and a concise AI-generated clinical reasoning summary (e.g., comments on RR, PaO₂/FiO₂, MAP trends). Use the AI insight as an additional input, but make the final decision yourself.",
+      "guidelines_markdown": "1. Read the AI model’s prediction and reasoning summary.\n2. Cross-check the AI analysis against the figure (HR, MAP, RR, PaCO₂, Vt, PaO₂/FiO₂).\n3. Factor in patient background (age, sex, diagnosis) and recent interventions.\n4. Confirm or override the AI by selecting ✅ (re-intubation required) or ❌ (not required) based on your clinical judgement.",
       "randomize": true,
       "ai_enabled": true
     }
@@ -57,5 +57,10 @@
     }
   },
   "default_per_item_seconds": 60,
-  "allow_resume": true
+  "allow_resume": true,
+  "participant_roles": [
+    "Senior Doctor",
+    "Junior Doctor",
+    "Medical Student"
+  ]
 }

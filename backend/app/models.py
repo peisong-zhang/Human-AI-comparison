@@ -31,6 +31,7 @@ class SessionModel(Base):
     participant_id: Mapped[str] = mapped_column(String(100), index=True)
     group_id: Mapped[str] = mapped_column(String(50), index=True)
     mode_id: Mapped[str] = mapped_column(String(50), index=True)
+    participant_role: Mapped[Optional[str]] = mapped_column(String(100))
     batch_id: Mapped[str] = mapped_column(String(50), index=True)
     started_at: Mapped[dt.datetime] = mapped_column(
         DateTime(timezone=True), default=func.now()

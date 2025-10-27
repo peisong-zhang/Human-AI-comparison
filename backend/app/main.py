@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from . import models
 from .config_loader import list_subset_images, load_config
 from .exporter import write_csv_snapshot
-from .database import SessionLocal, engine
+from .database import SessionLocal, engine, ensure_schema
 from .schemas import (
     ConfigGroup,
     ConfigMode,
@@ -34,6 +34,7 @@ from .settings import get_settings
 from .utils import get_client_ip, hash_ip
 
 models.Base.metadata.create_all(bind=engine)
+ensure_schema()
 
 app = FastAPI(title="Human-AI Comparison Experiment API")
 
@@ -153,6 +154,10 @@ def read_config() -> ConfigResponse:
             )
         )
 
+    participant_roles = list(config.participant_roles)
+    if not participant_roles:
+        participant_roles = [group.name for group in config.groups.values()]
+
     return ConfigResponse(
         batch_id=config.batch_id,
         default_per_item_seconds=config.default_per_item_seconds,
@@ -160,6 +165,7 @@ def read_config() -> ConfigResponse:
         subsets=subsets,
         modes=modes,
         groups=group_payloads,
+        participant_roles=participant_roles,
     )
 
 
@@ -178,6 +184,10 @@ def start_session(
     group_config = config.groups[payload.group_id]
     if not group_config.sequence:
         raise HTTPException(status_code=400, detail="Group has no stage sequence configured")
+
+    participant_role = payload.participant_role.strip() if payload.participant_role else None
+    if participant_role and participant_role not in (config.participant_roles or []):
+        raise HTTPException(status_code=400, detail="Unknown participant_role")
 
     client_ip = get_client_ip(request)
     ip_digest = hash_ip(client_ip)
@@ -208,6 +218,7 @@ def start_session(
                 batch_id=session_model.batch_id,
                 group_id=session_model.group_id,
                 participant_id=session_model.participant_id,
+                participant_role=session_model.participant_role,
                 stages=stage_infos,
                 items=[
                     SessionItem(
@@ -229,6 +240,7 @@ def start_session(
         participant_id=participant_id,
         group_id=payload.group_id,
         mode_id="multi_stage",
+        participant_role=participant_role,
         batch_id=config.batch_id,
         user_agent=user_agent,
         ip_hash=ip_digest,
@@ -304,6 +316,7 @@ def start_session(
         batch_id=session_model.batch_id,
         group_id=session_model.group_id,
         participant_id=session_model.participant_id,
+        participant_role=session_model.participant_role,
         stages=stage_infos,
         items=response_items,
         allow_resume=config.allow_resume,
@@ -377,8 +390,10 @@ def record_response(
     write_csv_snapshot(
         db,
         participant_id=session_model.participant_id,
-        mode_id=item_model.mode_id,
+        participant_role=session_model.participant_role,
+        mode_id=None,
         session_id=session_model.session_id,
+        group_id=session_model.group_id,
     )
 
     return JSONResponse({"status": "ok"})
@@ -401,8 +416,10 @@ def finish_session(payload: SessionFinishRequest, db: DBSession) -> JSONResponse
     write_csv_snapshot(
         db,
         participant_id=session_model.participant_id,
+        participant_role=session_model.participant_role,
         mode_id=None,
         session_id=session_model.session_id,
+        group_id=session_model.group_id,
     )
 
     return JSONResponse({"status": "ok"})

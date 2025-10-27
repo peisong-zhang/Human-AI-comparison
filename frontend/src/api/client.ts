@@ -17,6 +17,7 @@ export async function fetchConfig(): Promise<ConfigResponse> {
 interface StartSessionParams {
   participant_id: string;
   group_id: string;
+  participant_role?: string;
   user_agent?: string;
 }
 

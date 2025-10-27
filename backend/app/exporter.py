@@ -43,6 +43,7 @@ def iter_records(
     session_id: Optional[str] = None,
     participant_id: Optional[str] = None,
     mode_id: Optional[str] = None,
+    group_id: Optional[str] = None,
 ) -> Iterable[Tuple[models.RecordModel, models.SessionModel]]:
     stmt = (
         select(models.RecordModel, models.SessionModel)
@@ -61,6 +62,8 @@ def iter_records(
         stmt = stmt.where(models.SessionModel.participant_id == participant_id)
     if mode_id:
         stmt = stmt.where(models.SessionModel.mode_id == mode_id)
+    if group_id:
+        stmt = stmt.where(models.SessionModel.group_id == group_id)
     yield from session.execute(stmt)
 
 
@@ -74,8 +77,10 @@ def write_csv_snapshot(
     session: Session,
     *,
     participant_id: Optional[str] = None,
+    participant_role: Optional[str] = None,
     mode_id: Optional[str] = None,
     session_id: Optional[str] = None,
+    group_id: Optional[str] = None,
 ) -> None:
     settings = get_settings()
     if not settings.auto_export_enabled:
@@ -89,6 +94,10 @@ def write_csv_snapshot(
     parts = [stem]
     if participant_id:
         parts.append(_sanitize(participant_id))
+    if group_id:
+        parts.append(_sanitize(group_id))
+    if participant_role:
+        parts.append(_sanitize(participant_role))
     if mode_id:
         config = load_config()
         mode_label = None
@@ -110,6 +119,7 @@ def write_csv_snapshot(
             session_id=session_id,
             participant_id=participant_id,
             mode_id=mode_id,
+            group_id=group_id,
         ):
             writer.writerow(
                 [
