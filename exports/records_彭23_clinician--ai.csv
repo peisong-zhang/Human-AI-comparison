@@ -1,0 +1,1 @@
+session_id,participant_id,group_id,mode_id,stage_index,subset_id,batch_id,image_id,answer,order_index,elapsed_ms_item,elapsed_ms_global,skipped,item_timeout,ts_server,ts_client,user_agent,ip_hash,started_at,finished_at,total_elapsed_ms
