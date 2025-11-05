@@ -538,6 +538,19 @@ def serve_subset_image(subset_id: str, mode_id: str, path: str) -> FileResponse:
     return FileResponse(file_path)
 
 
+from sqlalchemy import text
+
+
+@app.post("/admin/clear_db")
+def clear_db():
+    """⚠️ Danger zone: clear all data in the database"""
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM items;"))
+        conn.execute(text("DELETE FROM records;"))
+        conn.execute(text("DELETE FROM sessions;"))
+        conn.commit()
+    return {"status": "✅ all data cleared"}
+
 @app.get("/")
 def root() -> dict[str, str]:
     return {"status": "ok", "message": "Human-AI comparison experiment API"}
