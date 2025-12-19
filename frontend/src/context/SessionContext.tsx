@@ -33,6 +33,7 @@ interface SessionContextValue {
   setCurrentIndex: (index: number) => void;
   recordAnswer: (imageId: string, answer: RecordedAnswer) => void;
   resetItemTimer: () => void;
+  shiftTimersBy: (deltaMs: number) => void;
   clearSession: () => void;
 }
 
@@ -144,6 +145,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     persistState({ itemStart: now });
   }, [persistState]);
 
+  const shiftTimersBy = useCallback((deltaMs: number) => {
+    if (!Number.isFinite(deltaMs) || deltaMs <= 0) return;
+    setGlobalStart((prev) => (prev === null ? prev : prev + deltaMs));
+    setItemStart((prev) => (prev === null ? prev : prev + deltaMs));
+  }, []);
+
   const setCurrentIndexSafe = useCallback(
     (index: number) => {
       setCurrentIndex(index);
@@ -180,6 +187,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setCurrentIndex: setCurrentIndexSafe,
       recordAnswer,
       resetItemTimer,
+      shiftTimersBy,
       clearSession
     }),
     [
@@ -194,6 +202,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       setCurrentIndexSafe,
       recordAnswer,
       resetItemTimer,
+      shiftTimersBy,
       clearSession
     ]
   );

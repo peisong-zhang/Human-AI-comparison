@@ -3,15 +3,20 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import io
+import os
 import random
+import sqlite3
+import tempfile
 from collections.abc import Generator
-from typing import Annotated, Optional, Any
+from pathlib import Path
+from typing import Annotated, Any, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
+from starlette.background import BackgroundTask
 
 from . import models
 from .config_loader import list_subset_images, load_config
@@ -409,6 +414,34 @@ def finish_session(payload: SessionFinishRequest, db: DBSession) -> JSONResponse
         raise HTTPException(status_code=404, detail="Session not found")
 
     if session_model.finished_at is None:
+        total_items = (
+            db.query(models.ItemModel)
+            .filter(models.ItemModel.session_id == payload.session_id)
+            .count()
+        )
+        if total_items <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Session has no items. / 会话没有题目，无法提交。",
+            )
+
+        completed_records = (
+            db.query(models.RecordModel)
+            .filter(
+                models.RecordModel.session_id == payload.session_id,
+                models.RecordModel.skipped.is_(False),
+                models.RecordModel.answer != "skip",
+            )
+            .count()
+        )
+
+        if completed_records < total_items:
+            remaining = total_items - completed_records
+            raise HTTPException(
+                status_code=400,
+                detail=f"Session incomplete: {remaining} item(s) unanswered or skipped. / 会话未完成：还有 {remaining} 个病例未作答或已跳过。",
+            )
+
         session_model.finished_at = dt.datetime.utcnow()
     if payload.total_elapsed_ms is not None:
         session_model.total_elapsed_ms = payload.total_elapsed_ms
@@ -516,26 +549,133 @@ def export_csv(
     )
 
 
+def _resolve_sqlite_database_path() -> Path:
+    if engine.dialect.name != "sqlite":
+        raise HTTPException(
+            status_code=501,
+            detail="Database export is only supported for SQLite.",
+        )
+
+    with engine.connect() as conn:
+        rows = conn.exec_driver_sql("PRAGMA database_list;").all()
+
+    for row in rows:
+        if row[1] == "main":
+            file_path = row[2]
+            if not file_path:
+                raise HTTPException(
+                    status_code=400,
+                    detail="In-memory database cannot be exported.",
+                )
+            return Path(file_path)
+
+    raise HTTPException(status_code=500, detail="Could not resolve database file path.")
+
+
+@app.get("/api/export/db")
+def export_db() -> FileResponse:
+    db_path = _resolve_sqlite_database_path()
+    if not db_path.exists() or not db_path.is_file():
+        raise HTTPException(status_code=404, detail="Database file not found.")
+
+    tmp_file = tempfile.NamedTemporaryFile(
+        prefix="experiment_db_",
+        suffix=".db",
+        delete=False,
+    )
+    tmp_path = Path(tmp_file.name)
+    tmp_file.close()
+
+    try:
+        src = sqlite3.connect(str(db_path))
+        dst = sqlite3.connect(str(tmp_path))
+        try:
+            src.backup(dst)
+        finally:
+            dst.close()
+            src.close()
+    except Exception as exc:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to export database: {exc}",
+        ) from exc
+
+    filename = f"experiment_{dt.datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.db"
+    return FileResponse(
+        path=str(tmp_path),
+        media_type="application/x-sqlite3",
+        filename=filename,
+        background=BackgroundTask(os.unlink, str(tmp_path)),
+    )
+
+
 @app.get("/images/subsets/{subset_id}/{mode_id}/{path:path}")
-def serve_subset_image(subset_id: str, mode_id: str, path: str) -> FileResponse:
+def serve_subset_image(
+    subset_id: str,
+    mode_id: str,
+    path: str,
+    lang: Optional[str] = None,
+) -> FileResponse:
     config = load_config()
     if subset_id not in config.subsets:
         raise HTTPException(status_code=404, detail="Unknown subset")
-    try:
-        images_dir = config.resolve_image_dir(subset_id, mode_id)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail="Unknown mode for subset") from exc
-    file_path = (images_dir / path).resolve()
+    subset_cfg = config.subsets[subset_id]
+    image_dir_cfg = subset_cfg.image_dirs.get(mode_id)
+    if image_dir_cfg is None:
+        raise HTTPException(status_code=404, detail="Unknown mode for subset")
 
-    try:
-        file_path.relative_to(images_dir.resolve())
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid filename") from exc
+    allowed_suffixes = (".png", ".jpg", ".jpeg", ".gif", ".webp")
+    requested_rel = Path(path)
 
-    if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="Image not found")
+    def safe_file(base_dir: Path, relative_path: str) -> Path:
+        candidate = (base_dir / relative_path).resolve()
+        try:
+            candidate.relative_to(base_dir.resolve())
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="Invalid filename") from exc
+        return candidate
 
-    return FileResponse(file_path)
+    def try_match_by_stem(base_dir: Path, rel_path: Path) -> Optional[Path]:
+        search_dir = safe_file(base_dir, str(rel_path.parent)) if rel_path.parent != Path(".") else base_dir.resolve()
+        if not search_dir.exists() or not search_dir.is_dir():
+            return None
+        stem = rel_path.stem
+        for suffix in allowed_suffixes:
+            candidate = safe_file(base_dir, str(rel_path.parent / f"{stem}{suffix}"))
+            if candidate.exists() and candidate.is_file():
+                return candidate
+        return None
+
+    languages: list[str] = []
+    if lang:
+        languages.append(lang)
+    for preferred in ("en", "zh"):
+        if preferred not in languages:
+            languages.append(preferred)
+    if isinstance(image_dir_cfg, dict):
+        for key in sorted(image_dir_cfg.keys()):
+            if key not in languages:
+                languages.append(key)
+
+    for candidate_lang in languages:
+        try:
+            images_dir = config.resolve_image_dir(subset_id, mode_id, candidate_lang)
+        except KeyError:
+            continue
+
+        file_path = safe_file(images_dir, path)
+        if file_path.exists() and file_path.is_file():
+            return FileResponse(file_path)
+
+        stem_match = try_match_by_stem(images_dir, requested_rel)
+        if stem_match is not None:
+            return FileResponse(stem_match)
+
+    raise HTTPException(status_code=404, detail="Image not found")
 
 
 from sqlalchemy import text

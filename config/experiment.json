@@ -2,65 +2,65 @@
   "batch_id": "2025A",
   "subsets": {
     "A": {
-      "name": "Subset A",
-      "description": "Randomised half of the cohort",
+      "name": "Subset A / 子集A",
+      "description": "Randomised half of the cohort / 随机分配的一半样本",
       "image_dirs": {
-        "human": "data/cases/subset_a/human",
-        "ai_assisted": "data/cases/subset_a/ai_assisted"
+        "human": { "en": "data/cases/subset_a/human_en", "zh": "data/cases/subset_a/human_zh" },
+        "ai_assisted": { "en": "data/cases/subset_a/ai_assisted_en", "zh": "data/cases/subset_a/ai_assisted_zh"}
       }
     },
     "B": {
-      "name": "Subset B",
-      "description": "Remaining half of the cohort",
+      "name": "Subset B / 子集B",
+      "description": "Remaining half of the cohort / 另一半样本",
       "image_dirs": {
-        "human": "data/cases/subset_b/human",
-        "ai_assisted": "data/cases/subset_b/ai_assisted"
+        "human": { "en": "data/cases/subset_b/human_en", "zh": "data/cases/subset_b/human_zh" },
+        "ai_assisted": { "en": "data/cases/subset_b/ai_assisted_en", "zh": "data/cases/subset_b/ai_assisted_zh" }
       }
     }
   },
   "modes": {
     "human": {
-      "name": "Clinician Only",
-      "task_markdown": "### Task Background\nEach figure summarises an ICU patient’s last several hours, including physiological trends and treatments. You will see:\n\n- Heart Rate (HR)\n- Mean Arterial Pressure (MAP)\n- Respiratory Rate (RR)\n- PaCO₂\n- Tidal Volume (Vt)\n- PaO₂/FiO₂\n\nGreen bars indicate mechanical ventilation (Vent). Blue, red, and purple bars represent No Vent (None), Vasopressor use (Vaso), and Both Vent + Vaso respectively. Patient age, sex, and primary diagnosis (e.g. CHF, MI) are listed above the plot.\n\n### Clinical Task\nDetermine whether the patient will require re-intubation (restart of mechanical ventilation) within the next 6 hours. Base your decision on:\n\n- Respiratory patterns (RR, PaO₂/FiO₂, PaCO₂, tidal volume)\n- Cardiovascular stability (HR, MAP)\n- Treatment interventions and their duration\n- Patient background information\n\nThis condition is **without AI assistance**—rely solely on the figure and your clinical judgement.",
-      "guidelines_markdown": "1. Review all panels, paying particular attention to recent respiratory trends.\n2. Consider hemodynamic stability and recent interventions (Vent, Vaso, Both).\n3. Integrate patient demographic/diagnostic information.\n4. Decide whether re-intubation within 6 hours is likely (choose ✅) or unlikely (choose ❌).",
+      "name": "Clinician Only / 仅医生",
+      "task_markdown": "### Task Background\nEach figure summarizes an ICU patient’s last several hours. It shows physiologic trends, labs, and respiratory/hemodynamic support.\n\nThe header includes: patient ID, sex, age, diagnosis at admission, total time on mechanical ventilation (Vent, hours), and vasopressor status in the last 12 hours.\n\nThe panels include:\n\n- Heart rate (beats/min)\n- Mean blood pressure (MAP, mmHg)\n- Respiratory rate (breaths/min)\n- Partial pressure of carbon dioxide (PaCO₂, mmHg)\n- Tidal volume observed (mL)\n- Positive end-expiratory pressure set (PEEP, cmH₂O)\n- pH, bicarbonate, sodium, potassium\n- Creatinine, blood urea nitrogen\n- Lactate\n- PaO₂/FiO₂ (ratio)\n- Rapid Shallow Breathing Index (RSBI, breaths/min/L)\n- Glasgow Coma Scale (GCS) total (score)\n\nSupport bars at the bottom of each panel indicate status over time: None (blue), Vent (green), Vaso (red), Both (purple). Dashed lines indicate reference ranges when provided.\n\nReference ranges (dashed lines):\n- Heart rate: 60–100 bpm\n- Mean blood pressure (MAP): 65–110 mmHg\n- Respiratory rate: 12–20 breaths/min\n- PaCO₂: 35–45 mmHg\n- Tidal volume observed: 420–560 mL\n- pH: 7.35–7.45\n- Bicarbonate: 22–28 mEq/L\n- Potassium: 3.5–5.0 mEq/L\n- Sodium: 135–145 mEq/L\n- Creatinine: 0.6–1.3 mg/dL\n- Blood urea nitrogen: 7–20 mg/dL\n- Lactate: 0.5–1.6 mmol/L\n- PaO₂/FiO₂: 300–500\n- RSBI: 0–105 breaths/min/L\n- PEEP set: 5 cmH₂O\n\n### Clinical Task\nDetermine whether the patient will require re-intubation (restart of mechanical ventilation) within the next 6 hours. Base your decision on respiratory mechanics/oxygenation, hemodynamics, neurologic status, lab/metabolic trends, and recent support (Vent/Vaso).\n\nThis condition is **without AI assistance**—rely solely on the figure and your clinical judgement.\n\n---\n\n### 任务背景\n每幅图总结了一名 ICU 患者在过去数小时内的生理趋势、化验与呼吸/循环支持情况。\n\n图上方信息包括：病例编号、性别、年龄、入院诊断、机械通气累计时长（Vent，小时），以及过去 12 小时是否使用升压药（Vaso）。\n\n图中面板包括：\n\n- 心率（次/分钟）\n- 平均血压（MAP，mmHg）\n- 呼吸频率（次/分钟）\n- PaCO₂（mmHg）\n- 潮气量 Vt（mL）\n- PEEP（cmH₂O）\n- pH、碳酸氢盐（HCO₃⁻）、钠、钾\n- 肌酐、血尿素氮\n- 乳酸\n- PaO₂/FiO₂（比值）\n- RSBI（浅快呼吸指数，次/分钟/L）\n- GCS（格拉斯哥昏迷评分，总分）\n\n每个面板底部的彩色条表示支持状态随时间的变化：无（None，蓝）、通气（Vent，绿）、升压药（Vaso，红）、二者同时（Both，紫）。若出现虚线，则表示该指标提供了参考范围。\n\n参考范围（虚线）：\n- 心率：60–100 次/分钟\n- 平均血压（MAP）：65–110 mmHg\n- 呼吸频率：12–20 次/分钟\n- PaCO₂：35–45 mmHg\n- 潮气量 Vt：420–560 mL\n- pH：7.35–7.45\n- HCO₃⁻：22–28 mEq/L\n- 钾：3.5–5.0 mEq/L\n- 钠：135–145 mEq/L\n- 肌酐：0.6–1.3 mg/dL\n- 血尿素氮：7–20 mg/dL\n- 乳酸：0.5–1.6 mmol/L\n- PaO₂/FiO₂：300–500\n- RSBI：0–105 次/分钟/L\n- PEEP：5 cmH₂O\n\n### 临床任务\n判断患者在未来 6 小时内是否需要再次插管（重新开始机械通气）。请综合呼吸/氧合与呼吸力学、血流动力学、神经状态、代谢/化验趋势以及近期支持（Vent/Vaso）做出判断。\n\n本条件 **不提供 AI 辅助** ——请仅依靠图像信息与您的临床判断。",
+      "guidelines_markdown": "1. Review all panels and compare trends to the dashed reference ranges.\n2. Focus on respiratory/oxygenation and mechanics (PaO₂/FiO₂, RSBI, PaCO₂, tidal volume, PEEP) and recent changes.\n3. Consider hemodynamics (HR/MAP), neurologic status (GCS), labs/metabolic state (pH, lactate, electrolytes, renal markers), and Vent/Vaso history.\n4. Decide whether re-intubation within 6 hours is likely (choose ✅) or unlikely (choose ❌).\n\n---\n\n1. 浏览所有面板，并将指标趋势与图中的参考范围（虚线）进行对照。\n2. 重点关注呼吸/氧合与呼吸力学（PaO₂/FiO₂、RSBI、PaCO₂、潮气量、PEEP）及其近期变化。\n3. 同时考虑血流动力学（HR/MAP）、神经状态（GCS）、代谢/化验（pH、乳酸、电解质、肾功能）以及 Vent/Vaso 的使用历史。\n4. 判断 6 小时内再次插管是否可能：可能请选择 ✅，不太可能请选择 ❌。",
       "randomize": false,
       "ai_enabled": false
     },
     "ai_assisted": {
-      "name": "Clinician + AI",
-      "task_markdown": "### Task Background\nEach figure summarises an ICU patient’s last several hours, including physiological trends and treatments:\n\n- Heart Rate (HR)\n- Mean Arterial Pressure (MAP)\n- Respiratory Rate (RR)\n- PaCO₂\n- Tidal Volume (Vt)\n- PaO₂/FiO₂\n\nTreatment bars: green = Vent, blue = None, red = Vaso, purple = Both Vent + Vaso. Patient age/sex/primary diagnosis are shown above the plot.\n\n### Clinical Task\nDecide whether the patient will need re-intubation within 6 hours, considering respiratory trends, hemodynamics, treatment history, and patient background.\n\n### AI-Assisted Mode\nYou will see the model’s prediction (✅/❌) and a concise AI-generated clinical reasoning summary (e.g., comments on RR, PaO₂/FiO₂, MAP trends). Use the AI insight as an additional input, but make the final decision yourself.",
-      "guidelines_markdown": "1. Read the AI model’s prediction and reasoning summary.\n2. Cross-check the AI analysis against the figure (HR, MAP, RR, PaCO₂, Vt, PaO₂/FiO₂).\n3. Factor in patient background (age, sex, diagnosis) and recent interventions.\n4. Confirm or override the AI by selecting ✅ (re-intubation required) or ❌ (not required) based on your clinical judgement.",
+      "name": "Clinician + AI / 医生 + AI",
+      "task_markdown": "### Task Background\nEach figure summarizes an ICU patient’s last several hours. It shows physiologic trends, labs, and respiratory/hemodynamic support.\n\nThe header includes: patient ID, sex, age, diagnosis at admission, total time on mechanical ventilation (Vent, hours), and vasopressor status in the last 12 hours.\n\nThe panels include:\n\n- Heart rate (beats/min)\n- Mean blood pressure (MAP, mmHg)\n- Respiratory rate (breaths/min)\n- Partial pressure of carbon dioxide (PaCO₂, mmHg)\n- Tidal volume observed (mL)\n- Positive end-expiratory pressure set (PEEP, cmH₂O)\n- pH, bicarbonate, sodium, potassium\n- Creatinine, blood urea nitrogen\n- Lactate\n- PaO₂/FiO₂ (ratio)\n- Rapid Shallow Breathing Index (RSBI, breaths/min/L)\n- Glasgow Coma Scale (GCS) total (score)\n\nSupport bars at the bottom of each panel indicate status over time: None (blue), Vent (green), Vaso (red), Both (purple). Dashed lines indicate reference ranges when provided.\n\nReference ranges (dashed lines):\n- Heart rate: 60–100 bpm\n- Mean blood pressure (MAP): 65–110 mmHg\n- Respiratory rate: 12–20 breaths/min\n- PaCO₂: 35–45 mmHg\n- Tidal volume observed: 420–560 mL\n- pH: 7.35–7.45\n- Bicarbonate: 22–28 mEq/L\n- Potassium: 3.5–5.0 mEq/L\n- Sodium: 135–145 mEq/L\n- Creatinine: 0.6–1.3 mg/dL\n- Blood urea nitrogen: 7–20 mg/dL\n- Lactate: 0.5–1.6 mmol/L\n- PaO₂/FiO₂: 300–500\n- RSBI: 0–105 breaths/min/L\n- PEEP set: 5 cmH₂O\n\n### Clinical Task\nDecide whether the patient will need re-intubation within 6 hours, considering respiratory trends (e.g., PaO₂/FiO₂, RSBI, PaCO₂, tidal volume, PEEP), hemodynamics (HR/MAP), neurologic status (GCS), labs/metabolic state, and recent support.\n\n### AI-Assisted Mode\nYou will see the model’s prediction (✅/❌) and a concise AI-generated clinical reasoning summary (e.g., comments on oxygenation/RSBI, ventilation settings, hemodynamics, and lab trends). Use the AI insight as an additional input, but make the final decision yourself.\n\n---\n\n### 任务背景\n每幅图总结了一名 ICU 患者在过去数小时内的生理趋势、化验与呼吸/循环支持情况。\n\n图上方信息包括：病例编号、性别、年龄、入院诊断、机械通气累计时长（Vent，小时），以及过去 12 小时是否使用升压药（Vaso）。\n\n图中面板包括：\n\n- 心率（次/分钟）\n- 平均血压（MAP，mmHg）\n- 呼吸频率（次/分钟）\n- PaCO₂（mmHg）\n- 潮气量 Vt（mL）\n- PEEP（cmH₂O）\n- pH、碳酸氢盐（HCO₃⁻）、钠、钾\n- 肌酐、血尿素氮\n- 乳酸\n- PaO₂/FiO₂（比值）\n- RSBI（浅快呼吸指数，次/分钟/L）\n- GCS（格拉斯哥昏迷评分，总分）\n\n每个面板底部的彩色条表示支持状态随时间的变化：无（None，蓝）、通气（Vent，绿）、升压药（Vaso，红）、二者同时（Both，紫）。若出现虚线，则表示该指标提供了参考范围。\n\n参考范围（虚线）：\n- 心率：60–100 次/分钟\n- 平均血压（MAP）：65–110 mmHg\n- 呼吸频率：12–20 次/分钟\n- PaCO₂：35–45 mmHg\n- 潮气量 Vt：420–560 mL\n- pH：7.35–7.45\n- HCO₃⁻：22–28 mEq/L\n- 钾：3.5–5.0 mEq/L\n- 钠：135–145 mEq/L\n- 肌酐：0.6–1.3 mg/dL\n- 血尿素氮：7–20 mg/dL\n- 乳酸：0.5–1.6 mmol/L\n- PaO₂/FiO₂：300–500\n- RSBI：0–105 次/分钟/L\n- PEEP：5 cmH₂O\n\n### 临床任务\n综合呼吸趋势（如 PaO₂/FiO₂、RSBI、PaCO₂、潮气量、PEEP）、血流动力学（HR/MAP）、神经状态（GCS）、代谢/化验以及近期支持情况，判断患者在未来 6 小时内是否需要再次插管。\n\n### AI 辅助模式\n你将看到模型的预测结果（✅/❌）以及简短的 AI 生成临床推理摘要（例如对氧合/RSBI、通气设置、血流动力学和化验趋势的说明）。请将 AI 观点作为辅助输入，但最终决定由你做出。",
+      "guidelines_markdown": "1. Read the AI model’s prediction and reasoning summary.\n2. Cross-check the AI analysis against the figure (oxygenation/RSBI, PaCO₂, tidal volume, PEEP, HR/MAP, labs, and support bars).\n3. Factor in patient background (age, sex, diagnosis) and Vent/Vaso history.\n4. Confirm or override the AI by selecting ✅ (re-intubation required) or ❌ (not required) based on your clinical judgement.\n\n---\n\n1. 阅读 AI 模型的预测结果与推理摘要。\n2. 将 AI 分析与图中信息进行交叉核对（氧合/RSBI、PaCO₂、潮气量、PEEP、HR/MAP、化验指标，以及底部支持状态条）。\n3. 纳入患者背景（年龄、性别、入院诊断）以及 Vent/Vaso 的使用历史。\n4. 基于你的临床判断选择 ✅（需要再次插管）或 ❌（不需要），可确认或推翻 AI 结论。",
       "randomize": true,
       "ai_enabled": true
     }
   },
   "groups": {
     "Group1": {
-      "name": "Group 1",
+      "name": "Group 1 / 组1",
       "per_item_seconds": 60,
       "hard_timeout": false,
       "soft_timeout": true,
       "sequence": [
-        { "subset": "A", "mode": "human", "label": "Stage 1: Subset A (No AI)" },
-        { "subset": "B", "mode": "ai_assisted", "label": "Stage 2: Subset B (AI assisted)" }
+        { "subset": "A", "mode": "human", "label": "Stage 1: Subset A (No AI) / 阶段1：子集A（无AI）" },
+        { "subset": "B", "mode": "ai_assisted", "label": "Stage 2: Subset B (AI assisted) / 阶段2：子集B（AI辅助）" }
       ]
     },
     "Group2": {
-      "name": "Group 2",
+      "name": "Group 2 / 组2",
       "per_item_seconds": 60,
       "hard_timeout": false,
       "soft_timeout": true,
       "sequence": [
-        { "subset": "B", "mode": "ai_assisted", "label": "Stage 1: Subset B (AI assisted)" },
-        { "subset": "A", "mode": "human", "label": "Stage 2: Subset A (No AI)" }
+        { "subset": "B", "mode": "ai_assisted", "label": "Stage 1: Subset B (AI assisted) / 阶段1：子集B（AI辅助）" },
+        { "subset": "A", "mode": "human", "label": "Stage 2: Subset A (No AI) / 阶段2：子集A（无AI）" }
       ]
     }
   },
   "default_per_item_seconds": 60,
   "allow_resume": true,
   "participant_roles": [
-    "Senior Doctor",
-    "Junior Doctor",
-    "Medical Student"
+    "Senior Doctor / 高年资医生",
+    "Junior Doctor / 住院医师",
+    "Medical Student / 医学生"
   ]
 }

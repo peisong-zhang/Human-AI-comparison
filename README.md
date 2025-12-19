@@ -78,6 +78,7 @@ requests to the backend running on port 8000.
 | `/api/record` | POST | Records a single response with timestamps and metadata. |
 | `/api/session/finish` | POST | Marks the session as complete, storing total elapsed time. |
 | `/api/export/csv` | GET | Streams CSV of records (optional filters: `group_id`, `mode_id`, `session_id`). |
+| `/api/export/db` | GET | Downloads a consistent SQLite snapshot of the experiment database. |
 | `/images/{mode}/{filename}` | GET | Serves static case images for the requested mode. |
 
 ---

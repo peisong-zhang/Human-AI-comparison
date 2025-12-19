@@ -50,7 +50,7 @@ export default function LoginPage() {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.participant_id.trim()) {
-      setError("Participant ID is required.");
+      setError("Participant ID is required. / 请填写参与者ID。");
       return;
     }
     setError(null);
@@ -66,7 +66,7 @@ export default function LoginPage() {
       navigate("/task");
     } catch (err) {
       console.error(err);
-      setError("Failed to start session. Please try again.");
+      setError("Failed to start session. Please try again. / 启动会话失败，请重试。");
     } finally {
       setLoading(false);
     }
@@ -76,32 +76,34 @@ export default function LoginPage() {
     <div className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center px-6 py-12">
       <header className="pb-8">
         <h1 className="text-3xl font-semibold text-white">
-          Human + AI Comparison Study
+          Human + AI Comparison Study / 人机对比实验
         </h1>
         <p className="mt-2 text-sm text-slate-300">
           Please log in with your participant ID to begin the evaluation.
+          <br />
+          请使用参与者ID登录并开始实验。
         </p>
       </header>
       <main className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-xl">
         {loadingConfig ? (
-          <p className="text-sm text-slate-300">Loading configuration...</p>
+          <p className="text-sm text-slate-300">Loading configuration... / 正在加载配置...</p>
         ) : config ? (
           <form className="space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-200">
-                Participant ID
+                Participant ID / 参与者ID
               </label>
               <input
                 type="text"
                 value={form.participant_id}
                 onChange={(event) => handleChange("participant_id", event.target.value)}
                 className="w-full rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-base text-slate-100 placeholder:text-slate-500 focus:border-primary focus:outline-none"
-                placeholder="e.g. P12345"
+                placeholder="e.g. name (名字)"
               />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-200">
-                Participant Group
+                Participant Group / 分组
               </label>
               <select
                 value={form.group_id}
@@ -117,7 +119,7 @@ export default function LoginPage() {
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-200">
-                Participant Role
+                Participant Role / 角色
               </label>
               <select
                 value={form.participant_role}
@@ -131,7 +133,7 @@ export default function LoginPage() {
                     </option>
                   ))
                 ) : (
-                  <option value="">No roles configured</option>
+                  <option value="">No roles configured / 未配置角色</option>
                 )}
               </select>
             </div>
@@ -139,7 +141,7 @@ export default function LoginPage() {
               <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
                 <div className="font-semibold text-slate-100">{selectedGroup.name}</div>
                 <p className="mt-1 text-xs text-slate-400">
-                  Role selected: {form.participant_role || "Not specified"}
+                  Role selected / 已选角色: {form.participant_role || "Not specified / 未指定"}
                 </p>
                 <ul className="mt-2 space-y-2 text-xs text-slate-400">
                   {selectedGroup.sequence.map((stage, idx) => {
@@ -148,7 +150,8 @@ export default function LoginPage() {
                     const label = stage.label ?? `${mode?.name ?? stage.mode_id} · ${subset?.name ?? stage.subset_id}`;
                     return (
                       <li key={`${stage.mode_id}-${stage.subset_id}-${idx}`}>
-                        <span className="font-semibold text-slate-100">Stage {idx + 1}:</span> {label}
+                        <span className="font-semibold text-slate-100">Stage {idx + 1} / 阶段{idx + 1}:</span>{" "}
+                        {label}
                       </li>
                     );
                   })}
@@ -161,11 +164,11 @@ export default function LoginPage() {
               disabled={loading}
               className="w-full rounded-lg bg-primary px-4 py-3 text-base font-semibold text-white transition hover:bg-primary/80 disabled:cursor-not-allowed disabled:bg-slate-700"
             >
-              {loading ? "Starting..." : "Start Session"}
+              {loading ? "Starting... / 正在开始..." : "Start Session / 开始实验"}
             </button>
           </form>
         ) : (
-          <p className="text-sm text-rose-400">Failed to load configuration.</p>
+          <p className="text-sm text-rose-400">Failed to load configuration. / 配置加载失败。</p>
         )}
       </main>
     </div>

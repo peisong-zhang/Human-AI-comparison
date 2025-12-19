@@ -1,4 +1,5 @@
 import { Navigate, Route, Routes } from "react-router-dom";
+import IconAttribution from "./components/IconAttribution";
 import { useSession } from "./context/SessionContext";
 import LoginPage from "./pages/LoginPage";
 import TaskPage from "./pages/TaskPage";
@@ -21,6 +22,7 @@ function App() {
         />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <IconAttribution />
     </div>
   );
 }

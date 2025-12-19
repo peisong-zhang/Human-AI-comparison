@@ -7,9 +7,9 @@ interface AnswerControlsProps {
   className?: string;
 }
 
-const buttons: { label: string; answer: AnswerValue; style: string }[] = [
-  { label: "✔ Yes", answer: "yes", style: "bg-emerald-600 hover:bg-emerald-500" },
-  { label: "✘ No", answer: "no", style: "bg-rose-600 hover:bg-rose-500" }
+const buttons: { en: string; zh: string; answer: AnswerValue; style: string }[] = [
+  { en: "✔ Yes", zh: "需要再插管", answer: "yes", style: "bg-emerald-600 hover:bg-emerald-500" },
+  { en: "✘ No", zh: "不需要再插管", answer: "no", style: "bg-rose-600 hover:bg-rose-500" }
 ];
 
 export default function AnswerControls({
@@ -29,19 +29,20 @@ export default function AnswerControls({
     <div className={containerClasses}>
       <div className="flex flex-col gap-4">
         <div className="grid gap-3 sm:grid-cols-2 sm:justify-items-center">
-          {buttons.map(({ label, answer, style }) => (
+          {buttons.map(({ en, zh, answer, style }) => (
             <button
               key={answer}
               type="button"
               disabled={disabled}
               onClick={() => onAnswer(answer)}
-              className={`w-full rounded-lg px-6 py-4 text-base font-semibold text-white transition sm:w-48 ${
+              className={`flex w-full flex-col items-center justify-center gap-1 rounded-lg px-6 py-4 text-center text-white transition sm:w-48 ${
                 disabled
                   ? "cursor-not-allowed bg-slate-700/60 text-slate-300"
                   : style
               }`}
             >
-              {label}
+              <span className="text-base font-semibold leading-tight">{en}</span>
+              <span className="text-sm font-semibold leading-tight opacity-95">{zh}</span>
             </button>
           ))}
         </div>
@@ -51,9 +52,10 @@ export default function AnswerControls({
               type="button"
               disabled={disabled}
               onClick={onSkip}
-              className="w-full max-w-[180px] rounded-lg border border-slate-600 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full max-w-[180px] flex-col items-center justify-center gap-0.5 rounded-lg border border-slate-600 px-4 py-2 text-center text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60 sm:w-48 sm:max-w-none"
             >
-              Skip
+              <span className="text-sm font-semibold leading-tight">Skip</span>
+              <span className="text-xs font-semibold leading-tight opacity-90">跳过</span>
             </button>
           </div>
         )}
