@@ -1,23 +1,46 @@
 import { AnswerValue } from "../types";
 
+type LanguageMode = "zh" | "en";
+
 interface AnswerControlsProps {
   disabled?: boolean;
   onAnswer: (answer: AnswerValue) => void;
   onSkip?: () => void;
   className?: string;
+  languageMode?: LanguageMode;
 }
 
-const buttons: { en: string; zh: string; answer: AnswerValue; style: string }[] = [
-  { en: "✔ Yes", zh: "需要再插管", answer: "yes", style: "bg-emerald-600 hover:bg-emerald-500" },
-  { en: "✘ No", zh: "不需要再插管", answer: "no", style: "bg-rose-600 hover:bg-rose-500" }
+const buttons: {
+  label: string;
+  secondary: { en: string; zh: string };
+  answer: AnswerValue;
+  style: string;
+}[] = [
+  {
+    label: "✔ Yes",
+    secondary: { en: "Re-intubation needed", zh: "需要再插管" },
+    answer: "yes",
+    style: "bg-rose-600 hover:bg-rose-500"
+  },
+  {
+    label: "✘ No",
+    secondary: { en: "No re-intubation needed", zh: "不需要再插管" },
+    answer: "no",
+    style: "bg-emerald-600 hover:bg-emerald-500"
+  }
 ];
 
 export default function AnswerControls({
   disabled,
   onAnswer,
   onSkip,
-  className
+  className,
+  languageMode = "en"
 }: AnswerControlsProps) {
+  const question =
+    languageMode === "zh"
+      ? "如果这个病人此时撤走呼吸机（撤管），未来六小时内需要重新插管吗？"
+      : "If this patient is extubated now (ventilator removed), will they need re-intubation within the next 6 hours?";
   const containerClasses = [
     "rounded-lg border border-slate-800 bg-slate-900/70 px-4 py-4 text-sm text-slate-300 shadow-lg sm:px-5 sm:py-5",
     className ?? ""
@@ -28,8 +51,11 @@ export default function AnswerControls({
   return (
     <div className={containerClasses}>
       <div className="flex flex-col gap-4">
+        <div className="text-center text-sm font-semibold leading-snug text-slate-100">
+          {question}
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 sm:justify-items-center">
-          {buttons.map(({ en, zh, answer, style }) => (
+          {buttons.map(({ label, secondary, answer, style }) => (
             <button
               key={answer}
               type="button"
@@ -41,8 +67,10 @@ export default function AnswerControls({
                   : style
               }`}
             >
-              <span className="text-base font-semibold leading-tight">{en}</span>
-              <span className="text-sm font-semibold leading-tight opacity-95">{zh}</span>
+              <span className="text-base font-semibold leading-tight">{label}</span>
+              <span className="text-sm font-semibold leading-tight opacity-95">
+                {languageMode === "zh" ? secondary.zh : secondary.en}
+              </span>
             </button>
           ))}
         </div>

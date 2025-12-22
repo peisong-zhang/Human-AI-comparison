@@ -533,6 +533,7 @@ export default function TaskPage() {
               <AnswerControls
                 className="mx-auto w-full max-w-md lg:mx-0"
                 disabled={submitting || instructionsOpen}
+                languageMode={languageMode}
                 onAnswer={(answer) => void handleAnswer(answer)}
                 onSkip={() => void handleAnswer("skip", { skip: true })}
               />
