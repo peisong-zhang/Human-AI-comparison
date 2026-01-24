@@ -68,6 +68,8 @@ def ensure_schema() -> None:
                 conn.execute(text("ALTER TABLE records ADD COLUMN stage_index INTEGER"))
             if "mode_id" not in record_cols:
                 conn.execute(text("ALTER TABLE records ADD COLUMN mode_id TEXT"))
+            if "sheet_row" not in record_cols:
+                conn.execute(text("ALTER TABLE records ADD COLUMN sheet_row INTEGER"))
 
             session_cols = {
                 _row_name(row)
@@ -84,6 +86,7 @@ def ensure_schema() -> None:
             conn.execute(text("ALTER TABLE records ADD COLUMN IF NOT EXISTS subset_id VARCHAR(50)"))
             conn.execute(text("ALTER TABLE records ADD COLUMN IF NOT EXISTS stage_index INTEGER"))
             conn.execute(text("ALTER TABLE records ADD COLUMN IF NOT EXISTS mode_id VARCHAR(50)"))
+            conn.execute(text("ALTER TABLE records ADD COLUMN IF NOT EXISTS sheet_row INTEGER"))
             conn.execute(text("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS participant_role VARCHAR(100)"))
         try:
             conn.commit()

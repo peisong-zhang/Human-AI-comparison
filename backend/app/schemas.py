@@ -35,6 +35,7 @@ class ConfigGroup(BaseModel):
     hard_timeout: bool
     soft_timeout: bool
     quota: Optional[int]
+    role_quotas: Optional[dict[str, int]]
     sequence: list[GroupSequenceStage]
 
 
@@ -46,6 +47,19 @@ class ConfigResponse(BaseModel):
     modes: list[ConfigMode]
     groups: list[ConfigGroup]
     participant_roles: list[str]
+
+
+class QuotaGroupStatus(BaseModel):
+    group_id: str
+    name: str
+    limit: Optional[int]
+    completed: int
+    remaining: Optional[int]
+
+
+class QuotaStatusResponse(BaseModel):
+    participant_role: str
+    groups: list[QuotaGroupStatus]
 
 
 class SessionStartRequest(BaseModel):

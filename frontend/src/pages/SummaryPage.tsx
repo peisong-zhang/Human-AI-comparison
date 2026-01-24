@@ -15,7 +15,7 @@ export default function SummaryPage() {
     if (!session) return [];
     return session.items.map((item) => ({
       ...item,
-      response: responses[item.image_id]
+      response: responses[item.order_index]
     }));
   }, [session, responses]);
 
@@ -50,7 +50,7 @@ export default function SummaryPage() {
     if (!session) return [];
     return session.stages.map((stage) => {
       const itemsInStage = responseList.filter((item) => item.stage_index === stage.stage_index);
-      const answered = itemsInStage.filter((item) => responses[item.image_id]).length;
+      const answered = itemsInStage.filter((item) => responses[item.order_index]).length;
       return {
         stage,
         total: itemsInStage.length,
@@ -139,7 +139,7 @@ export default function SummaryPage() {
             </thead>
             <tbody className="divide-y divide-slate-800/80 text-slate-200">
               {responseList.map((item) => (
-                <tr key={item.image_id} className="hover:bg-slate-900/60">
+                <tr key={item.order_index} className="hover:bg-slate-900/60">
                   <td className="px-4 py-2 text-slate-400">{item.order_index + 1}</td>
                   <td className="px-4 py-2 text-slate-400">Stage {item.stage_index + 1}</td>
                   <td className="px-4 py-2 text-slate-200">{session.stages[item.stage_index]?.subset_name ?? item.subset_id}</td>

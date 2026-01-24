@@ -7,12 +7,16 @@ metadata. The stack is **FastAPI + SQLite** on the backend and **React + Vite +
 TailwindCSS** on the frontend.
 
 ## Features
-- Multi-mode experiments (e.g. Standard vs. AI-Human comparison) with per-mode image pools.
-- Participant grouping with configurable timers (soft or hard item timeouts).
-- Global and per-item timing, keyboard shortcuts (Y/N/S/←/→), auto-save + resume.
+- Multi-stage experiments with group-specific sequences, role-aware quotas, and per-item timing (soft/hard timeouts).
+- Required participant login fields (ID, role, group), group confirmation, and start checklist guidance.
+- Bilingual UI with language toggle and language-specific image sets via `image_dirs`.
+- Floating Task Instructions panel that pauses timers while open.
+- Skip support with prioritized "next unfinished" navigation and keyboard shortcuts (Y/N/S/←/→).
+- Global + per-item timers, progress indicators, and summary page metrics.
 - Detailed record storage (`sessions`, `records`, `items`) including timestamps, IP hash, and user agent.
-- CSV export endpoint with optional filters.
-- Responsive UI with instructions panel, timers, progress, and session summary dashboard.
+- Optional auto CSV snapshots, CSV export endpoint with filters, and database snapshot download.
+- Optional Google Sheets export with header auto-write and row upsert to prevent duplicate answers.
+- Admin utilities to clear the database and/or configured Google Sheet.
 
 ---
 
@@ -77,16 +81,19 @@ requests to the backend running on port 8000.
 | `/api/session/start` | POST | Starts or resumes a participant session (payload: participant_id, group_id). |
 | `/api/record` | POST | Records a single response with timestamps and metadata. |
 | `/api/session/finish` | POST | Marks the session as complete, storing total elapsed time. |
+| `/api/quota_status` | GET | Returns completed-session counts and remaining quota per group for a participant role. |
 | `/api/export/csv` | GET | Streams CSV of records (optional filters: `group_id`, `mode_id`, `session_id`). |
 | `/api/export/db` | GET | Downloads a consistent SQLite snapshot of the experiment database. |
 | `/images/{mode}/{filename}` | GET | Serves static case images for the requested mode. |
+| `/admin/clear_google_sheet` | POST | Clears the configured Google Sheet and rewrites the header row. |
+| `/admin/clear_db` | POST | Clears all `items`, `records`, and `sessions` from the database. |
 
 ---
 
 ## Frontend Highlights
-- Home/Login screen for participant auth and mode selection.
-- Task workspace with responsive layout, timers, keyboard shortcuts, skip support, and case progress.
-- Auto-save to `localStorage` enabling resume if the browser refreshes or closes.
+- Home/Login screen with required ID/role/group, quota visibility, and confirmation checklist.
+- Task workspace with bilingual toggle, image language switching, timers, skip navigation, and case progress.
+- Optional localStorage resume (disabled when `allow_resume=false`).
 - Summary page listing per-item metrics, aggregated stats, and per-session CSV download.
 
 ---

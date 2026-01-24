@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import datetime as dt
 import io
+import logging
 import os
 import random
 import sqlite3
@@ -11,16 +12,17 @@ from collections.abc import Generator
 from pathlib import Path
 from typing import Annotated, Any, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session
 from starlette.background import BackgroundTask
 
 from . import models
 from .config_loader import list_subset_images, load_config
-from .exporter import write_csv_snapshot
+from .exporter import format_record_row, write_csv_snapshot
+from .sheets_exporter import upsert_row as upsert_sheet_row, clear_sheet as clear_sheet_export
 from .database import SessionLocal, engine, ensure_schema
 from .schemas import (
     ConfigGroup,
@@ -34,6 +36,8 @@ from .schemas import (
     SessionStartRequest,
     SessionStartResponse,
     StageInfo,
+    QuotaGroupStatus,
+    QuotaStatusResponse,
 )
 from .settings import get_settings
 from .utils import get_client_ip, hash_ip
@@ -44,6 +48,7 @@ ensure_schema()
 app = FastAPI(title="Human-AI Comparison Experiment API")
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -67,6 +72,81 @@ def get_db_session() -> Generator[Session, None, None]:
 
 
 DBSession = Annotated[Session, Depends(get_db_session)]
+
+
+def _run_csv_snapshot(
+    *,
+    participant_id: Optional[str],
+    participant_role: Optional[str],
+    mode_id: Optional[str],
+    session_id: Optional[str],
+    group_id: Optional[str],
+) -> None:
+    db = SessionLocal()
+    try:
+        write_csv_snapshot(
+            db,
+            participant_id=participant_id,
+            participant_role=participant_role,
+            mode_id=mode_id,
+            session_id=session_id,
+            group_id=group_id,
+        )
+        db.commit()
+    except Exception:
+        logger.exception("Failed to write CSV snapshot")
+        db.rollback()
+    finally:
+        db.close()
+
+
+def _schedule_csv_snapshot(background_tasks: BackgroundTasks, **kwargs: Any) -> None:
+    if not settings.auto_export_enabled:
+        return
+    background_tasks.add_task(_run_csv_snapshot, **kwargs)
+
+
+def _run_sheets_append_for_record(session_id: str, image_id: str) -> None:
+    db = SessionLocal()
+    try:
+        stmt = (
+            select(models.RecordModel, models.SessionModel)
+            .join(
+                models.SessionModel,
+                models.SessionModel.session_id == models.RecordModel.session_id,
+            )
+            .where(
+                models.RecordModel.session_id == session_id,
+                models.RecordModel.image_id == image_id,
+            )
+        )
+        row = db.execute(stmt).first()
+        if not row:
+            logger.warning(
+                "Google Sheets append skipped; record not found",
+                extra={"session_id": session_id, "image_id": image_id},
+            )
+            return
+        record_model, session_model = row
+        row_index = upsert_sheet_row(
+            format_record_row(record_model, session_model),
+            record_model.sheet_row,
+        )
+        if row_index and record_model.sheet_row != row_index:
+            record_model.sheet_row = row_index
+            db.commit()
+    except Exception:
+        logger.exception("Failed to write Google Sheets row")
+    finally:
+        db.close()
+
+
+def _schedule_sheets_append(
+    background_tasks: BackgroundTasks, session_id: str, image_id: str
+) -> None:
+    if not settings.google_sheets_enabled:
+        return
+    background_tasks.add_task(_run_sheets_append_for_record, session_id, image_id)
 def _build_stage_info_from_items(
     items: list[models.ItemModel], group_config, config
 ) -> list[StageInfo]:
@@ -155,6 +235,7 @@ def read_config() -> ConfigResponse:
                 hard_timeout=group_config.hard_timeout,
                 soft_timeout=group_config.soft_timeout,
                 quota=group_config.quota,
+                role_quotas=group_config.role_quotas,
                 sequence=sequence,
             )
         )
@@ -172,6 +253,51 @@ def read_config() -> ConfigResponse:
         groups=group_payloads,
         participant_roles=participant_roles,
     )
+
+
+@app.get("/api/quota_status", response_model=QuotaStatusResponse)
+def quota_status(participant_role: str, db: DBSession) -> QuotaStatusResponse:
+    role = participant_role.strip()
+    if not role:
+        raise HTTPException(status_code=400, detail="participant_role is required")
+
+    config = load_config()
+    if config.participant_roles and role not in config.participant_roles:
+        raise HTTPException(status_code=400, detail="Unknown participant_role")
+
+    group_ids = list(config.groups.keys())
+    counts = (
+        db.query(models.SessionModel.group_id, func.count(models.SessionModel.session_id))
+        .filter(
+            models.SessionModel.group_id.in_(group_ids),
+            models.SessionModel.participant_role == role,
+            models.SessionModel.finished_at.isnot(None),
+        )
+        .group_by(models.SessionModel.group_id)
+        .all()
+    )
+    count_map = {group_id: count for group_id, count in counts}
+
+    group_statuses: list[QuotaGroupStatus] = []
+    for group_id, group_config in config.groups.items():
+        limit = None
+        if group_config.role_quotas and role in group_config.role_quotas:
+            limit = group_config.role_quotas[role]
+        elif group_config.quota is not None:
+            limit = group_config.quota
+        completed = count_map.get(group_id, 0)
+        remaining = max(limit - completed, 0) if limit is not None else None
+        group_statuses.append(
+            QuotaGroupStatus(
+                group_id=group_id,
+                name=group_config.name,
+                limit=limit,
+                completed=completed,
+                remaining=remaining,
+            )
+        )
+
+    return QuotaStatusResponse(participant_role=role, groups=group_statuses)
 
 
 @app.post("/api/session/start", response_model=SessionStartResponse)
@@ -193,6 +319,47 @@ def start_session(
     participant_role = payload.participant_role.strip() if payload.participant_role else None
     if participant_role and participant_role not in (config.participant_roles or []):
         raise HTTPException(status_code=400, detail="Unknown participant_role")
+    if group_config.role_quotas and not participant_role:
+        raise HTTPException(status_code=400, detail="participant_role is required for this group")
+
+    if group_config.role_quotas:
+        if participant_role not in group_config.role_quotas:
+            raise HTTPException(
+                status_code=400,
+                detail="No quota configured for selected participant_role",
+            )
+        role_limit = group_config.role_quotas.get(participant_role)
+        if role_limit is not None:
+            completed = (
+                db.query(func.count(models.SessionModel.session_id))
+                .filter(
+                    models.SessionModel.group_id == payload.group_id,
+                    models.SessionModel.participant_role == participant_role,
+                    models.SessionModel.finished_at.isnot(None),
+                )
+                .scalar()
+                or 0
+            )
+            if completed >= role_limit:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Selected group is full for this role.",
+                )
+    elif group_config.quota is not None:
+        completed = (
+            db.query(func.count(models.SessionModel.session_id))
+            .filter(
+                models.SessionModel.group_id == payload.group_id,
+                models.SessionModel.finished_at.isnot(None),
+            )
+            .scalar()
+            or 0
+        )
+        if completed >= group_config.quota:
+            raise HTTPException(
+                status_code=400,
+                detail="Selected group is full.",
+            )
 
     client_ip = get_client_ip(request)
     ip_digest = hash_ip(client_ip)
@@ -330,7 +497,10 @@ def start_session(
 
 @app.post("/api/record")
 def record_response(
-    payload: RecordPayload, request: Request, db: DBSession
+    payload: RecordPayload,
+    request: Request,
+    db: DBSession,
+    background_tasks: BackgroundTasks,
 ) -> JSONResponse:
     stmt_session: Select[tuple[models.SessionModel]] = select(models.SessionModel).where(
         models.SessionModel.session_id == payload.session_id
@@ -392,20 +562,29 @@ def record_response(
         )
         db.add(record_model)
 
-    write_csv_snapshot(
-        db,
+    _schedule_csv_snapshot(
+        background_tasks,
         participant_id=session_model.participant_id,
         participant_role=session_model.participant_role,
         mode_id=None,
         session_id=session_model.session_id,
         group_id=session_model.group_id,
     )
+    _schedule_sheets_append(
+        background_tasks,
+        session_model.session_id,
+        record_model.image_id,
+    )
 
     return JSONResponse({"status": "ok"})
 
 
 @app.post("/api/session/finish")
-def finish_session(payload: SessionFinishRequest, db: DBSession) -> JSONResponse:
+def finish_session(
+    payload: SessionFinishRequest,
+    db: DBSession,
+    background_tasks: BackgroundTasks,
+) -> JSONResponse:
     stmt_session: Select[tuple[models.SessionModel]] = select(models.SessionModel).where(
         models.SessionModel.session_id == payload.session_id
     )
@@ -446,8 +625,8 @@ def finish_session(payload: SessionFinishRequest, db: DBSession) -> JSONResponse
     if payload.total_elapsed_ms is not None:
         session_model.total_elapsed_ms = payload.total_elapsed_ms
 
-    write_csv_snapshot(
-        db,
+    _schedule_csv_snapshot(
+        background_tasks,
         participant_id=session_model.participant_id,
         participant_role=session_model.participant_role,
         mode_id=None,
@@ -690,6 +869,23 @@ def clear_db():
         conn.execute(text("DELETE FROM sessions;"))
         conn.commit()
     return {"status": "✅ all data cleared"}
+
+
+@app.post("/admin/clear_google_sheet")
+def clear_google_sheet():
+    """⚠️ Danger zone: clear all data in the configured Google Sheet."""
+    try:
+        cleared = clear_sheet_export()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500, detail="Failed to clear Google Sheet."
+        ) from exc
+    if not cleared:
+        raise HTTPException(
+            status_code=400,
+            detail="Google Sheets export is not configured or disabled.",
+        )
+    return {"status": "✅ Google Sheet cleared"}
 
 @app.get("/")
 def root() -> dict[str, str]:

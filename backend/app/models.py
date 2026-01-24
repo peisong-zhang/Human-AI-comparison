@@ -94,5 +94,6 @@ class RecordModel(Base):
     subset_id: Mapped[Optional[str]] = mapped_column(String(50))
     stage_index: Mapped[Optional[int]] = mapped_column(Integer)
     mode_id: Mapped[Optional[str]] = mapped_column(String(50))
+    sheet_row: Mapped[Optional[int]] = mapped_column(Integer)
 
     session: Mapped["SessionModel"] = relationship("SessionModel", back_populates="records")

@@ -11,7 +11,7 @@ import ProgressBar from "../components/ProgressBar";
 import SummaryStatCard from "../components/SummaryStatCard";
 import TimerDisplay from "../components/TimerDisplay";
 import { useSession } from "../context/SessionContext";
-import { AnswerValue, SessionItem } from "../types";
+import { AnswerValue, RecordedAnswer, SessionItem } from "../types";
 import { clamp, formatDuration } from "../utils/time";
 
 interface HandleAnswerOptions {
@@ -40,12 +40,14 @@ export default function TaskPage() {
   const [timeoutTriggered, setTimeoutTriggered] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [finishing, setFinishing] = useState(false);
+  const [hint, setHint] = useState<string | null>(null);
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
   const [viewportSize, setViewportSize] = useState<{ width: number; height: number }>({ width: 1024, height: 768 });
   const [showCompletionPrompt, setShowCompletionPrompt] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
   const [languageMode, setLanguageMode] = useState<"en" | "zh">("en");
   const instructionPauseStartedAt = useRef<number | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
     if (!session || !config) {
@@ -114,7 +116,7 @@ export default function TaskPage() {
 
   const totalItems = items.length;
   const progressValue = totalItems ? currentIndex + 1 : 0;
-  const currentResponse = currentItem ? responses[currentItem.image_id] : undefined;
+  const currentResponse = currentItem ? responses[currentItem.order_index] : undefined;
 
   const stageStats = useMemo(() => {
     const counts: number[] = Array.from({ length: stages.length }, () => 0);
@@ -142,7 +144,7 @@ export default function TaskPage() {
   const incompleteItems = useMemo(() => {
     if (!session) return [];
     return session.items.filter((item) => {
-      const response = responses[item.image_id];
+      const response = responses[item.order_index];
       return !response || response.skipped || response.answer === "skip";
     });
   }, [session, responses]);
@@ -167,7 +169,7 @@ export default function TaskPage() {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (!currentItem || submitting || instructionsOpen) return;
+      if (!currentItem || submitting || submittingRef.current || instructionsOpen) return;
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       switch (event.key.toLowerCase()) {
         case "y":
@@ -230,26 +232,79 @@ export default function TaskPage() {
     }
   };
 
-  const goToNextUnanswered = () => {
-    if (!items.length || totalItems <= 0) return;
-    if (incompleteItems.length === 0) return;
+  const isSkippedResponse = (response?: RecordedAnswer) =>
+    Boolean(response && (response.skipped || response.answer === "skip"));
+  const isUnansweredResponse = (response?: RecordedAnswer) => !response;
+  const isUnfinishedResponse = (response?: RecordedAnswer) =>
+    isSkippedResponse(response) || isUnansweredResponse(response);
+
+  const findNextIndexBy = (
+    responseMap: Record<number, RecordedAnswer>,
+    predicate: (response?: RecordedAnswer) => boolean
+  ) => {
+    if (!items.length || totalItems <= 0) return null;
     for (let offset = 1; offset <= totalItems; offset += 1) {
       const idx = (currentIndex + offset) % totalItems;
       const candidate = items[idx];
       if (!candidate) continue;
-      const response = responses[candidate.image_id];
-      if (!response || response.skipped || response.answer === "skip") {
-        goToIndex(idx);
-        return;
+      const response = responseMap[candidate.order_index];
+      if (predicate(response)) {
+        return idx;
       }
     }
+    return null;
   };
+
+  const goToNextUnanswered = () => {
+    if (!items.length || totalItems <= 0) return;
+    if (incompleteItems.length === 0) return;
+    if (currentItem) {
+      const currentResponse = responses[currentItem.order_index];
+      if (isUnfinishedResponse(currentResponse)) {
+        let hasUnfinishedBefore = false;
+        for (let idx = 0; idx < currentIndex; idx += 1) {
+          const item = items[idx];
+          if (!item) continue;
+          if (isUnfinishedResponse(responses[item.order_index])) {
+            hasUnfinishedBefore = true;
+            break;
+          }
+        }
+        if (!hasUnfinishedBefore) {
+          setHint(
+            languageMode === "zh"
+              ? "当前已经是第一个未完成的病例，请先完成这一题。"
+              : "You are already on the first unfinished case. Please complete it first."
+          );
+          return;
+        }
+      }
+    }
+    const nextSkipped = findNextIndexBy(responses, isSkippedResponse);
+    if (nextSkipped !== null) {
+      goToIndex(nextSkipped);
+      return;
+    }
+    const nextUnanswered = findNextIndexBy(responses, isUnansweredResponse);
+    if (nextUnanswered !== null) {
+      goToIndex(nextUnanswered);
+    }
+  };
+
+  useEffect(() => {
+    if (!hint) return;
+    const timer = window.setTimeout(() => setHint(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [hint]);
 
   const handleAnswer = async (
     answer: AnswerValue,
     options: HandleAnswerOptions = {}
   ) => {
-    if (!session || !currentItem || submitting || instructionsOpen) return;
+    if (!session || !currentItem || submitting || submittingRef.current || instructionsOpen) return;
+    const previousResponse = responses[currentItem.order_index];
+    const wasSkipped = isSkippedResponse(previousResponse);
+    submittingRef.current = true;
     if (timeoutTriggered && answer !== "timeout") {
       setTimeoutTriggered(false);
     }
@@ -260,6 +315,14 @@ export default function TaskPage() {
       const now = Date.now();
       const elapsedItem = itemStart ? now - itemStart : 0;
       const elapsedGlobal = globalStart ? now - globalStart : now;
+      const nextResponse = {
+        answer,
+        elapsed_ms_item: elapsedItem,
+        elapsed_ms_global: elapsedGlobal,
+        skipped: options.skip ?? answer === "skip",
+        item_timeout: options.timeout ?? answer === "timeout",
+        recorded_at: new Date().toISOString()
+      };
       await apiRecordAnswer({
         session_id: session.session_id,
         image_id: currentItem.image_id,
@@ -273,23 +336,43 @@ export default function TaskPage() {
         user_agent: window.navigator.userAgent
       });
 
-      recordAnswer(currentItem.image_id, {
-        answer,
-        elapsed_ms_item: elapsedItem,
-        elapsed_ms_global: elapsedGlobal,
-        skipped: options.skip ?? answer === "skip",
-        item_timeout: options.timeout ?? answer === "timeout",
-        recorded_at: new Date().toISOString()
-      });
+      recordAnswer(currentItem.order_index, nextResponse);
 
-      if (currentIndex < totalItems - 1) {
-        goToNext();
+      const nextResponses = {
+        ...responses,
+        [currentItem.order_index]: nextResponse
+      };
+      let navigated = false;
+      if (wasSkipped) {
+        const nextSkipped = findNextIndexBy(nextResponses, isSkippedResponse);
+        if (nextSkipped !== null) {
+          goToIndex(nextSkipped);
+          navigated = true;
+        } else {
+          const nextUnanswered = findNextIndexBy(nextResponses, isUnansweredResponse);
+          if (nextUnanswered !== null) {
+            goToIndex(nextUnanswered);
+            navigated = true;
+          }
+        }
+      }
+      if (!navigated) {
+        if (currentIndex < totalItems - 1) {
+          goToNext();
+        } else if (answer === "skip") {
+          setHint(
+            languageMode === "zh"
+              ? "已到最后一题，请使用“定位下一个未完成”返回未完成病例。"
+              : "You are on the last case. Use “Find next unfinished” to return to unfinished items."
+          );
+        }
       }
     } catch (err) {
       console.error(err);
       setError("Failed to save response. Please retry. / 保存失败，请重试。");
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
     }
   };
 
@@ -317,14 +400,16 @@ export default function TaskPage() {
   const itemProgressPercent =
     itemLimitMs && itemLimitMs > 0 ? clamp((itemElapsed / itemLimitMs) * 100, 0, 100) : 0;
 
+  const isAiMode = Boolean(currentStage?.ai_enabled);
+
   const computedImageDimensions = useMemo(() => {
     if (!imageNaturalSize) {
       return null;
     }
     const aspectRatio =
       imageNaturalSize.height === 0 ? 1 : imageNaturalSize.width / imageNaturalSize.height;
-    const widthLimit = viewportSize.width * 0.9;
-    const heightLimit = viewportSize.height * 0.85;
+    const widthLimit = viewportSize.width * (isAiMode ? 0.97 : 0.94);
+    const heightLimit = viewportSize.height * (isAiMode ? 0.91 : 0.88);
 
     let width = widthLimit;
     let height = width / aspectRatio;
@@ -341,10 +426,13 @@ export default function TaskPage() {
       width: Math.max(width, minWidth),
       height: Math.max(height, minHeight)
     };
-  }, [imageNaturalSize, viewportSize.width, viewportSize.height]);
+  }, [imageNaturalSize, isAiMode, viewportSize.width, viewportSize.height]);
 
   const imageContainerStyle = useMemo<CSSProperties>(() => {
-    const base: CSSProperties = { maxWidth: "90vw", maxHeight: "82vh" };
+    const base: CSSProperties = {
+      maxWidth: isAiMode ? "97vw" : "94vw",
+      maxHeight: isAiMode ? "91vh" : "88vh"
+    };
     if (!computedImageDimensions) {
       return base;
     }
@@ -353,7 +441,7 @@ export default function TaskPage() {
       width: `${Math.round(computedImageDimensions.width)}px`,
       height: `${Math.round(computedImageDimensions.height)}px`
     };
-  }, [computedImageDimensions]);
+  }, [computedImageDimensions, isAiMode]);
 
   useEffect(() => {
     setShowCompletionPrompt(allAnswered && onLastItem);
@@ -456,6 +544,10 @@ export default function TaskPage() {
           </button>
         </div>
       </div>
+      <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-4 py-2 text-xs text-rose-200">
+        <div>Refreshing or closing this page will exit the annotation task. To pause, open Task Instructions.</div>
+        <div>刷新或关闭页面将退出标注任务，如需暂停，请打开任务说明。</div>
+      </div>
 
       {currentStage && (
         <GuidelinePanel
@@ -470,10 +562,17 @@ export default function TaskPage() {
         {currentItem ? (
           <div className="space-y-6">
             <div className="space-y-3">
-              <div className="flex flex-col gap-2 text-slate-200 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-3 text-slate-200 lg:flex-row lg:items-center lg:justify-between">
                 <div className="text-base font-semibold">{currentItem.title}</div>
-                <div className="text-xs uppercase tracking-wide text-slate-400">
-                  Overall / 总进度 {progressValue} / {totalItems}
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full border border-amber-500/50 bg-amber-500/10 px-3 py-1 text-sm font-semibold text-amber-100">
+                    {languageMode === "zh"
+                      ? `第 ${progressValue} 张 / 共 ${totalItems} 张`
+                      : `Case ${progressValue} / ${totalItems}`}
+                  </div>
+                  <div className="text-xs uppercase tracking-wide text-slate-400">
+                    Overall / 总进度 {progressValue} / {totalItems}
+                  </div>
                 </div>
               </div>
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
@@ -494,7 +593,9 @@ export default function TaskPage() {
               </div>
             </div>
             <div
-              className="relative mx-auto w-full max-w-full overflow-hidden rounded-2xl border border-slate-800 bg-black p-4"
+              className={`relative mx-auto w-full max-w-full overflow-hidden rounded-2xl border border-slate-800 bg-black ${
+                isAiMode ? "p-3" : "p-4"
+              }`}
               style={imageContainerStyle}
             >
               {currentItem && (
@@ -621,60 +722,11 @@ export default function TaskPage() {
                     </p>
                   )}
                   {error && <p className="text-xs text-rose-400 text-center">{error}</p>}
+                  {hint && <p className="text-xs text-amber-300 text-center">{hint}</p>}
                   <p className="text-xs text-center text-slate-500">
                     Finishing stores total elapsed time and locks further edits.
                     <br />
                     完成提交会记录总用时，并锁定后续修改。
-                  </p>
-                </div>
-              </div>
-            </div>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
-                {currentResponse ? (
-                  <>
-                    <div className="font-semibold text-slate-100">Response saved / 已保存</div>
-                    <dl className="mt-3 space-y-2 text-xs">
-                      {currentStage && (
-                        <div className="flex justify-between">
-                          <dt>Stage / 阶段</dt>
-                          <dd>{currentStage.label ?? `${currentStage.mode_name} · ${currentStage.subset_name}`}</dd>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <dt>Answer / 回答</dt>
-                        <dd className="capitalize">{currentResponse.answer}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt>Item time / 单题用时</dt>
-                        <dd>{formatDuration(currentResponse.elapsed_ms_item)}</dd>
-                      </div>
-                      <div className="flex justify-between">
-                        <dt>Global time / 总用时</dt>
-                        <dd>{formatDuration(currentResponse.elapsed_ms_global)}</dd>
-                      </div>
-                    </dl>
-                  </>
-                ) : (
-                  <div className="text-xs text-slate-400">
-                    No decision saved yet. Use the buttons above to answer.
-                    <br />
-                    尚未保存作答，请使用上方按钮进行选择。
-                  </div>
-                )}
-              </div>
-              <div className="rounded-lg border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-300">
-                <div className="space-y-2">
-                  <div className="text-sm font-semibold text-slate-100">Session Progress / 会话进度</div>
-                  <p className="text-xs text-slate-400">
-                    Keep responses consistent. Use navigation buttons above to review items if needed.
-                    <br />
-                    请保持作答一致性；如需回看，可使用上方上一题/下一题按钮。
-                  </p>
-                  <p className="text-xs text-slate-500">
-                    Total time updates once the session is completed.
-                    <br />
-                    总用时会在提交后更新。
                   </p>
                 </div>
               </div>

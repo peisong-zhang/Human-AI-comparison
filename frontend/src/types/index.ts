@@ -13,6 +13,7 @@ export interface GroupConfig {
   hard_timeout: boolean;
   soft_timeout: boolean;
   quota?: number | null;
+  role_quotas?: Record<string, number> | null;
   sequence: GroupSequenceStage[];
 }
 
@@ -39,6 +40,7 @@ export interface ConfigResponse {
   subsets: ConfigSubset[];
   modes: ModeConfig[];
   groups: GroupConfig[];
+  participant_roles: string[];
 }
 
 export interface StageInfo {
@@ -73,6 +75,19 @@ export interface SessionStartResponse {
   stages: StageInfo[];
   items: SessionItem[];
   allow_resume: boolean;
+}
+
+export interface QuotaGroupStatus {
+  group_id: string;
+  name: string;
+  limit: number | null;
+  completed: number;
+  remaining: number | null;
+}
+
+export interface QuotaStatusResponse {
+  participant_role: string;
+  groups: QuotaGroupStatus[];
 }
 
 export interface RecordPayload {

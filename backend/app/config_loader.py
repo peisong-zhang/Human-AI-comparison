@@ -27,6 +27,7 @@ class GroupConfig(BaseModel):
     hard_timeout: bool = False
     soft_timeout: bool = True
     quota: Optional[int] = None
+    role_quotas: Optional[dict[str, int]] = None
     sequence: list[StageSequenceItem] = Field(default_factory=list)
 
 

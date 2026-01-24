@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 from pathlib import Path
-from typing import Iterable, Tuple, Optional
+from typing import Any, Iterable, Tuple, Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -35,6 +35,33 @@ CSV_HEADER = [
     "finished_at",
     "total_elapsed_ms",
 ]
+
+def format_record_row(
+    record_model: models.RecordModel, session_model: models.SessionModel
+) -> list[Any]:
+    return [
+        session_model.session_id,
+        session_model.participant_id,
+        session_model.group_id,
+        session_model.mode_id,
+        record_model.stage_index,
+        record_model.subset_id,
+        session_model.batch_id,
+        record_model.image_id,
+        record_model.answer,
+        record_model.order_index,
+        record_model.elapsed_ms_item,
+        record_model.elapsed_ms_global,
+        int(record_model.skipped),
+        int(record_model.item_timeout),
+        record_model.ts_server.isoformat() if record_model.ts_server else "",
+        record_model.ts_client.isoformat() if record_model.ts_client else "",
+        record_model.user_agent or "",
+        record_model.ip_hash or "",
+        session_model.started_at.isoformat() if session_model.started_at else "",
+        session_model.finished_at.isoformat() if session_model.finished_at else "",
+        session_model.total_elapsed_ms or "",
+    ]
 
 
 def iter_records(
@@ -121,28 +148,4 @@ def write_csv_snapshot(
             mode_id=mode_id,
             group_id=group_id,
         ):
-            writer.writerow(
-                [
-                    session_model.session_id,
-                    session_model.participant_id,
-                    session_model.group_id,
-                    session_model.mode_id,
-                    record_model.stage_index,
-                    record_model.subset_id,
-                    session_model.batch_id,
-                    record_model.image_id,
-                    record_model.answer,
-                    record_model.order_index,
-                    record_model.elapsed_ms_item,
-                    record_model.elapsed_ms_global,
-                    int(record_model.skipped),
-                    int(record_model.item_timeout),
-                    record_model.ts_server.isoformat() if record_model.ts_server else "",
-                    record_model.ts_client.isoformat() if record_model.ts_client else "",
-                    record_model.user_agent or "",
-                    record_model.ip_hash or "",
-                    session_model.started_at.isoformat() if session_model.started_at else "",
-                    session_model.finished_at.isoformat() if session_model.finished_at else "",
-                    session_model.total_elapsed_ms or "",
-                ]
-            )
+            writer.writerow(format_record_row(record_model, session_model))

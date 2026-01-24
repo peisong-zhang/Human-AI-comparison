@@ -17,6 +17,12 @@ class Settings(BaseSettings):
     auto_export_enabled: bool = True
     auto_export_dir: Path = Path("exports")
     auto_export_filename: str = "records.csv"
+    google_sheets_enabled: bool = False
+    google_sheets_id: Optional[str] = None
+    google_sheets_range: str = "Sheet1!A:Z"
+    google_sheets_value_input_option: str = "RAW"
+    google_sheets_credentials_json: Optional[str] = None
+    google_sheets_credentials_path: Optional[Path] = None
 
     class Config:
         env_prefix = "EXPERIMENT_"

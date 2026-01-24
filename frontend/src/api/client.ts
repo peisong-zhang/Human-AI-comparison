@@ -1,6 +1,7 @@
 import axios from "axios";
 import {
   ConfigResponse,
+  QuotaStatusResponse,
   RecordPayload,
   SessionStartResponse
 } from "../types";
@@ -36,16 +37,7 @@ export async function finishSession(
   session_id: string,
   total_elapsed_ms: number
 ): Promise<void> {
-  try {
-    await api.post("/api/session/finish", { session_id, total_elapsed_ms });
-  } catch (error) {
-    if (axios.isAxiosError(error) && error.response?.status === 404) {
-      // Treat missing session as already finished to avoid blocking the user
-      console.warn("Session not found during finish; treating as already completed.");
-      return;
-    }
-    throw error;
-  }
+  await api.post("/api/session/finish", { session_id, total_elapsed_ms });
 }
 
 export async function downloadCsv(
@@ -60,6 +52,15 @@ export async function downloadCsv(
   const { data } = await api.get("/api/export/csv", {
     params,
     responseType: "blob"
+  });
+  return data;
+}
+
+export async function fetchQuotaStatus(
+  participant_role: string
+): Promise<QuotaStatusResponse> {
+  const { data } = await api.get<QuotaStatusResponse>("/api/quota_status", {
+    params: { participant_role }
   });
   return data;
 }
