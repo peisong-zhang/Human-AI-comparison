@@ -42,6 +42,8 @@ export default function TaskPage() {
   const [finishing, setFinishing] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [imageNaturalSize, setImageNaturalSize] = useState<{ width: number; height: number } | null>(null);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [dimensionCache, setDimensionCache] = useState<Record<string, { width: number; height: number }>>({});
   const [viewportSize, setViewportSize] = useState<{ width: number; height: number }>({ width: 1024, height: 768 });
   const [showCompletionPrompt, setShowCompletionPrompt] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
@@ -79,10 +81,12 @@ export default function TaskPage() {
   useEffect(() => {
     setTimeoutTriggered(false);
     setImageNaturalSize(null);
+    setImageLoaded(false);
   }, [currentIndex, session?.items]);
 
   useEffect(() => {
     setImageNaturalSize(null);
+    setImageLoaded(false);
   }, [languageMode]);
 
   const groupConfig = useMemo(() => {
@@ -140,6 +144,14 @@ export default function TaskPage() {
   const stageTotalItems = currentStage?.total_items ?? currentStageCount;
   const stageDisplayTotal = stageTotalItems > 0 ? stageTotalItems : currentStageCount;
   const stageDisplayIndex = stageDisplayTotal > 0 ? currentStagePosition + 1 : 0;
+  const stageKey = currentStage
+    ? `${currentStage.stage_index}-${currentStage.mode_id}-${currentStage.ai_enabled ? "ai" : "human"}`
+    : "unknown";
+
+  useEffect(() => {
+    setImageNaturalSize(null);
+    setImageLoaded(false);
+  }, [stageKey]);
 
   const incompleteItems = useMemo(() => {
     if (!session) return [];
@@ -428,20 +440,57 @@ export default function TaskPage() {
     };
   }, [imageNaturalSize, isAiMode, viewportSize.width, viewportSize.height]);
 
+  const fallbackImageDimensions = useMemo(() => {
+    const fallbackAspectRatio = 4 / 3;
+    const widthLimit = viewportSize.width * (isAiMode ? 0.97 : 0.94);
+    const heightLimit = viewportSize.height * (isAiMode ? 0.91 : 0.88);
+
+    let width = widthLimit;
+    let height = width / fallbackAspectRatio;
+
+    if (height > heightLimit) {
+      height = heightLimit;
+      width = heightLimit * fallbackAspectRatio;
+    }
+
+    const minWidth = Math.min(420, widthLimit);
+    const minHeight = Math.min(280, heightLimit);
+
+    return {
+      width: Math.max(width, minWidth),
+      height: Math.max(height, minHeight)
+    };
+  }, [isAiMode, viewportSize.height, viewportSize.width]);
+
+  useEffect(() => {
+    if (!imageLoaded || !computedImageDimensions) return;
+    setDimensionCache((prev) => ({
+      ...prev,
+      [stageKey]: computedImageDimensions
+    }));
+  }, [computedImageDimensions, imageLoaded, stageKey]);
+
+  const resolvedImageDimensions = useMemo(() => {
+    if (imageLoaded && computedImageDimensions) {
+      return computedImageDimensions;
+    }
+    return dimensionCache[stageKey] ?? fallbackImageDimensions;
+  }, [computedImageDimensions, dimensionCache, fallbackImageDimensions, imageLoaded, stageKey]);
+
   const imageContainerStyle = useMemo<CSSProperties>(() => {
     const base: CSSProperties = {
       maxWidth: isAiMode ? "97vw" : "94vw",
       maxHeight: isAiMode ? "91vh" : "88vh"
     };
-    if (!computedImageDimensions) {
+    if (!resolvedImageDimensions) {
       return base;
     }
     return {
       ...base,
-      width: `${Math.round(computedImageDimensions.width)}px`,
-      height: `${Math.round(computedImageDimensions.height)}px`
+      width: `${Math.round(resolvedImageDimensions.width)}px`,
+      height: `${Math.round(resolvedImageDimensions.height)}px`
     };
-  }, [computedImageDimensions, isAiMode]);
+  }, [isAiMode, resolvedImageDimensions]);
 
   useEffect(() => {
     setShowCompletionPrompt(allAnswered && onLastItem);
@@ -602,16 +651,28 @@ export default function TaskPage() {
                 <img
                   src={imageSrc}
                   alt={currentItem.title}
-                  className="mx-auto"
+                  className="mx-auto transition-opacity duration-300"
                   draggable={false}
-                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "contain",
+                    opacity: imageLoaded ? 1 : 0
+                  }}
                   onLoad={(event) =>
-                    setImageNaturalSize({
-                      width: event.currentTarget.naturalWidth,
-                      height: event.currentTarget.naturalHeight
-                    })
+                    (() => {
+                      setImageNaturalSize({
+                        width: event.currentTarget.naturalWidth,
+                        height: event.currentTarget.naturalHeight
+                      });
+                      setImageLoaded(true);
+                    })()
                   }
+                  onError={() => setImageLoaded(true)}
                 />
+              )}
+              {!imageLoaded && (
+                <div className="absolute inset-0 animate-pulse rounded-2xl bg-slate-900/40" />
               )}
               {itemLimitMs && (
                 <div className="absolute bottom-4 left-4 w-48">
