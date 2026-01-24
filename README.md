@@ -44,6 +44,7 @@ pip install -r backend/requirements.txt
 
 export EXPERIMENT_CONFIG_PATH=config/experiment.json
 export EXPERIMENT_DATABASE_URL=sqlite:///./backend/app/experiment.db
+export EXPERIMENT_AUTO_EXPORT_DIR=./exports
 uvicorn app.main:app --reload --app-dir backend/app
 ```
 The API will listen on `http://127.0.0.1:8000`.
@@ -106,6 +107,19 @@ config/          Experiment configuration JSON
 data/            Image folders per mode (see data/README.md)
 docker-compose.yml
 ```
+
+---
+
+## Render Persistent Disk (SQLite + CSV exports)
+If you deploy on Render and want SQLite + CSV exports to persist across deploys,
+attach a Persistent Disk (e.g. mount path `/var/data`) and set:
+
+```bash
+EXPERIMENT_DATABASE_URL=sqlite:////var/data/experiment.db
+EXPERIMENT_AUTO_EXPORT_DIR=/var/data/exports
+```
+
+This ensures the database and auto-exported CSV files live on the persistent disk.
 
 ---
 
