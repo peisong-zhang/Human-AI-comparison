@@ -53,12 +53,48 @@ export default function TaskPage() {
   const instructionPauseStartedAt = useRef<number | null>(null);
   const submittingRef = useRef(false);
   const lastLoadedSrc = useRef<string>("");
+  const backgroundExitTriggered = useRef(false);
 
   useEffect(() => {
     if (!session || !config) {
       navigate("/");
     }
   }, [session, config, navigate]);
+
+  useEffect(() => {
+    if (!session) return;
+
+    const isMobileDevice = () => {
+      if (typeof window === "undefined") return false;
+      const ua = navigator.userAgent || "";
+      const uaMatch = /Mobi|Android|iPhone|iPad|iPod|Mobile|Opera Mini|IEMobile/i.test(ua);
+      const coarsePointer = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+      const smallScreen = window.matchMedia?.("(max-width: 900px)")?.matches ?? false;
+      return uaMatch || (coarsePointer && smallScreen);
+    };
+
+    const handleBackgroundExit = () => {
+      if (!isMobileDevice()) return;
+      if (backgroundExitTriggered.current) return;
+      backgroundExitTriggered.current = true;
+      pauseSession();
+      navigate("/");
+    };
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        handleBackgroundExit();
+      }
+    };
+
+    window.addEventListener("pagehide", handleBackgroundExit);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      window.removeEventListener("pagehide", handleBackgroundExit);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [session, pauseSession, navigate]);
 
   const stages = session?.stages ?? [];
   const items = session?.items ?? [];
