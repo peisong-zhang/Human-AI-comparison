@@ -15,6 +15,7 @@ from .settings import get_settings
 CSV_HEADER = [
     "session_id",
     "participant_id",
+    "participant_role",
     "group_id",
     "mode_id",
     "stage_index",
@@ -42,6 +43,7 @@ def format_record_row(
     return [
         session_model.session_id,
         session_model.participant_id,
+        session_model.participant_role or "",
         session_model.group_id,
         session_model.mode_id,
         record_model.stage_index,

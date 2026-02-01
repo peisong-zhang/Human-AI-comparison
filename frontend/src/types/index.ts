@@ -72,9 +72,23 @@ export interface SessionStartResponse {
   batch_id: string;
   group_id: string;
   participant_id: string;
+  participant_role?: string;
   stages: StageInfo[];
   items: SessionItem[];
   allow_resume: boolean;
+  current_index?: number | null;
+  elapsed_ms_global?: number | null;
+  responses?: ResponseSnapshot[] | null;
+}
+
+export interface ResponseSnapshot {
+  order_index: number;
+  answer: AnswerValue;
+  skipped: boolean;
+  item_timeout: boolean;
+  elapsed_ms_item?: number | null;
+  elapsed_ms_global?: number | null;
+  recorded_at?: string | null;
 }
 
 export interface QuotaGroupStatus {

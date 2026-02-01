@@ -10,16 +10,10 @@ import { fetchConfig } from "../api/client";
 import {
   ConfigResponse,
   RecordedAnswer,
+  ResponseSnapshot,
   SessionStartResponse
 } from "../types";
 
-interface PersistedState {
-  session: SessionStartResponse;
-  responses: Record<number, RecordedAnswer>;
-  currentIndex: number;
-  globalStart: number;
-  itemStart: number;
-}
 
 interface SessionContextValue {
   config: ConfigResponse | null;
@@ -34,23 +28,13 @@ interface SessionContextValue {
   recordAnswer: (orderIndex: number, answer: RecordedAnswer) => void;
   resetItemTimer: () => void;
   shiftTimersBy: (deltaMs: number) => void;
+  pauseSession: () => void;
   clearSession: () => void;
 }
 
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "human_ai_experiment_state";
-
-const isValidPersistedSession = (
-  sessionData: SessionStartResponse | undefined
-): sessionData is SessionStartResponse => {
-  if (!sessionData) return false;
-  if (!sessionData.session_id?.trim()) return false;
-  if (!sessionData.participant_id?.trim()) return false;
-  if (!sessionData.group_id?.trim()) return false;
-  if (!Array.isArray(sessionData.stages) || !Array.isArray(sessionData.items)) return false;
-  return true;
-};
 
 export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [config, setConfig] = useState<ConfigResponse | null>(null);
@@ -79,93 +63,55 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     if (!config) return;
     if (!config.allow_resume) {
       window.localStorage.removeItem(STORAGE_KEY);
-      setSession(null);
-      setResponses({});
-      setCurrentIndex(0);
-      setGlobalStart(null);
-      setItemStart(null);
-      return;
-    }
-
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
-    try {
-      const parsed = JSON.parse(raw) as PersistedState;
-      if (isValidPersistedSession(parsed.session)) {
-        setSession(parsed.session);
-        setResponses(parsed.responses ?? {});
-        setCurrentIndex(parsed.currentIndex ?? 0);
-        setGlobalStart(parsed.globalStart ?? Date.now());
-        setItemStart(parsed.itemStart ?? Date.now());
-      } else {
-        window.localStorage.removeItem(STORAGE_KEY);
-      }
-    } catch (error) {
-      console.warn("Failed to parse persisted session state", error);
-      window.localStorage.removeItem(STORAGE_KEY);
     }
   }, [config]);
-
-  const persistState = useCallback(
-    (next: Partial<PersistedState>) => {
-      if (!session || globalStart === null || itemStart === null || config?.allow_resume === false) {
-        return;
-      }
-      const snapshot: PersistedState = {
-        session,
-        responses,
-        currentIndex,
-        globalStart,
-        itemStart,
-        ...next
-      };
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
-    },
-    [session, responses, currentIndex, globalStart, itemStart]
-  );
 
   const startSession = useCallback(
     (sessionData: SessionStartResponse) => {
       if (session && session.session_id === sessionData.session_id) {
         setSession(sessionData);
-        persistState({ session: sessionData } as Partial<PersistedState>);
         return;
       }
 
       setSession(sessionData);
-      setResponses({});
-      setCurrentIndex(0);
+      const responseMap: Record<number, RecordedAnswer> = {};
+      if (sessionData.responses) {
+        sessionData.responses.forEach((snapshot: ResponseSnapshot) => {
+          responseMap[snapshot.order_index] = {
+            answer: snapshot.answer,
+            elapsed_ms_item: snapshot.elapsed_ms_item ?? 0,
+            elapsed_ms_global: snapshot.elapsed_ms_global ?? 0,
+            skipped: snapshot.skipped,
+            item_timeout: snapshot.item_timeout,
+            recorded_at: snapshot.recorded_at ?? new Date().toISOString()
+          };
+        });
+      }
+      setResponses(responseMap);
+      const resumedIndex = sessionData.current_index ?? 0;
+      setCurrentIndex(resumedIndex);
       const now = Date.now();
-      setGlobalStart(now);
+      const resumeElapsed = sessionData.elapsed_ms_global ?? 0;
+      const globalStartNext = now - Math.max(resumeElapsed, 0);
+      setGlobalStart(globalStartNext);
       setItemStart(now);
-      const snapshot: PersistedState = {
-        session: sessionData,
-        responses: {},
-        currentIndex: 0,
-        globalStart: now,
-        itemStart: now
-      };
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
     },
-    [session, persistState]
+    [session]
   );
 
   const recordAnswer = useCallback(
     (orderIndex: number, answer: RecordedAnswer) => {
       setResponses((prev) => {
-        const next = { ...prev, [orderIndex]: answer };
-        persistState({ responses: next });
-        return next;
+        return { ...prev, [orderIndex]: answer };
       });
     },
-    [persistState]
+    []
   );
 
   const resetItemTimer = useCallback(() => {
     const now = Date.now();
     setItemStart(now);
-    persistState({ itemStart: now });
-  }, [persistState]);
+  }, []);
 
   const shiftTimersBy = useCallback((deltaMs: number) => {
     if (!Number.isFinite(deltaMs) || deltaMs <= 0) return;
@@ -176,9 +122,8 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const setCurrentIndexSafe = useCallback(
     (index: number) => {
       setCurrentIndex(index);
-      persistState({ currentIndex: index });
     },
-    [persistState]
+    []
   );
 
   const clearSession = useCallback(() => {
@@ -190,11 +135,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     window.localStorage.removeItem(STORAGE_KEY);
   }, []);
 
-  useEffect(() => {
-    if (session && globalStart !== null && itemStart !== null) {
-      persistState({});
-    }
-  }, [session, globalStart, itemStart, persistState]);
+  const pauseSession = useCallback(() => {
+    setSession(null);
+    setResponses({});
+    setCurrentIndex(0);
+    setGlobalStart(null);
+    setItemStart(null);
+  }, []);
 
   const value = useMemo<SessionContextValue>(
     () => ({
@@ -210,6 +157,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       recordAnswer,
       resetItemTimer,
       shiftTimersBy,
+      pauseSession,
       clearSession
     }),
     [
@@ -225,6 +173,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       recordAnswer,
       resetItemTimer,
       shiftTimersBy,
+      pauseSession,
       clearSession
     ]
   );

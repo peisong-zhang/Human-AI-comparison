@@ -57,10 +57,11 @@ export async function downloadCsv(
 }
 
 export async function fetchQuotaStatus(
-  participant_role: string
+  participant_role?: string
 ): Promise<QuotaStatusResponse> {
+  const params = participant_role ? { participant_role } : undefined;
   const { data } = await api.get<QuotaStatusResponse>("/api/quota_status", {
-    params: { participant_role }
+    params
   });
   return data;
 }

@@ -21,7 +21,7 @@ from starlette.background import BackgroundTask
 
 from . import models
 from .config_loader import list_subset_images, load_config
-from .exporter import format_record_row, write_csv_snapshot
+from .exporter import CSV_HEADER, format_record_row, write_csv_snapshot
 from .sheets_exporter import upsert_row as upsert_sheet_row, clear_sheet as clear_sheet_export
 from .database import SessionLocal, engine, ensure_schema
 from .schemas import (
@@ -38,6 +38,7 @@ from .schemas import (
     StageInfo,
     QuotaGroupStatus,
     QuotaStatusResponse,
+    ResponseSnapshot,
 )
 from .settings import get_settings
 from .utils import get_client_ip, hash_ip
@@ -256,32 +257,31 @@ def read_config() -> ConfigResponse:
 
 
 @app.get("/api/quota_status", response_model=QuotaStatusResponse)
-def quota_status(participant_role: str, db: DBSession) -> QuotaStatusResponse:
-    role = participant_role.strip()
-    if not role:
-        raise HTTPException(status_code=400, detail="participant_role is required")
+def quota_status(db: DBSession, participant_role: Optional[str] = None) -> QuotaStatusResponse:
+    role = participant_role.strip() if participant_role else ""
 
     config = load_config()
-    if config.participant_roles and role not in config.participant_roles:
+    if role and config.participant_roles and role not in config.participant_roles:
         raise HTTPException(status_code=400, detail="Unknown participant_role")
 
     group_ids = list(config.groups.keys())
-    counts = (
+    counts_query = (
         db.query(models.SessionModel.group_id, func.count(models.SessionModel.session_id))
         .filter(
             models.SessionModel.group_id.in_(group_ids),
-            models.SessionModel.participant_role == role,
             models.SessionModel.finished_at.isnot(None),
         )
         .group_by(models.SessionModel.group_id)
-        .all()
     )
+    if role:
+        counts_query = counts_query.filter(models.SessionModel.participant_role == role)
+    counts = counts_query.all()
     count_map = {group_id: count for group_id, count in counts}
 
     group_statuses: list[QuotaGroupStatus] = []
     for group_id, group_config in config.groups.items():
         limit = None
-        if group_config.role_quotas and role in group_config.role_quotas:
+        if role and group_config.role_quotas and role in group_config.role_quotas:
             limit = group_config.role_quotas[role]
         elif group_config.quota is not None:
             limit = group_config.quota
@@ -322,44 +322,7 @@ def start_session(
     if group_config.role_quotas and not participant_role:
         raise HTTPException(status_code=400, detail="participant_role is required for this group")
 
-    if group_config.role_quotas:
-        if participant_role not in group_config.role_quotas:
-            raise HTTPException(
-                status_code=400,
-                detail="No quota configured for selected participant_role",
-            )
-        role_limit = group_config.role_quotas.get(participant_role)
-        if role_limit is not None:
-            completed = (
-                db.query(func.count(models.SessionModel.session_id))
-                .filter(
-                    models.SessionModel.group_id == payload.group_id,
-                    models.SessionModel.participant_role == participant_role,
-                    models.SessionModel.finished_at.isnot(None),
-                )
-                .scalar()
-                or 0
-            )
-            if completed >= role_limit:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Selected group is full for this role.",
-                )
-    elif group_config.quota is not None:
-        completed = (
-            db.query(func.count(models.SessionModel.session_id))
-            .filter(
-                models.SessionModel.group_id == payload.group_id,
-                models.SessionModel.finished_at.isnot(None),
-            )
-            .scalar()
-            or 0
-        )
-        if completed >= group_config.quota:
-            raise HTTPException(
-                status_code=400,
-                detail="Selected group is full.",
-            )
+    # Quota limits are displayed for monitoring, but not enforced at session start.
 
     client_ip = get_client_ip(request)
     ip_digest = hash_ip(client_ip)
@@ -370,14 +333,21 @@ def start_session(
     if config.allow_resume:
         stmt: Select[tuple[models.SessionModel]] = (
             select(models.SessionModel)
-            .where(
-                models.SessionModel.participant_id == participant_id,
-                models.SessionModel.group_id == payload.group_id,
-            )
+            .where(models.SessionModel.participant_id == participant_id)
             .order_by(models.SessionModel.started_at.desc())
         )
         session_model = db.scalars(stmt).first()
         if session_model and session_model.finished_at is None:
+            if payload.group_id != session_model.group_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Participant has an unfinished session in another group.",
+                )
+            if participant_role and session_model.participant_role and participant_role != session_model.participant_role:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Participant has an unfinished session with a different role.",
+                )
             items = (
                 db.query(models.ItemModel)
                 .filter(models.ItemModel.session_id == session_model.session_id)
@@ -385,6 +355,27 @@ def start_session(
                 .all()
             )
             stage_infos = _build_stage_info_from_items(items, group_config, config)
+            records = (
+                db.query(models.RecordModel)
+                .filter(models.RecordModel.session_id == session_model.session_id)
+                .order_by(models.RecordModel.order_index.asc())
+                .all()
+            )
+            record_by_order = {record.order_index: record for record in records if record.order_index is not None}
+            current_index = 0
+            for idx, item in enumerate(items):
+                record = record_by_order.get(item.order_index)
+                if not record or record.skipped or record.answer == "skip":
+                    current_index = idx
+                    break
+            else:
+                current_index = max(len(items) - 1, 0)
+
+            max_elapsed = 0
+            for record in records:
+                if record.elapsed_ms_global and record.elapsed_ms_global > max_elapsed:
+                    max_elapsed = record.elapsed_ms_global
+
             return SessionStartResponse(
                 session_id=session_model.session_id,
                 batch_id=session_model.batch_id,
@@ -394,18 +385,33 @@ def start_session(
                 stages=stage_infos,
                 items=[
                     SessionItem(
-                    stage_index=item.stage_index,
-                    subset_id=item.subset_id,
-                    mode_id=item.mode_id,
-                    image_id=item.image_id,
-                    filename=item.filename,
-                    title=item.image_id.replace("_", " ").title(),
-                    order_index=item.order_index,
-                    url=f"/images/subsets/{item.subset_id}/{item.mode_id}/{item.filename}",
-                )
+                        stage_index=item.stage_index,
+                        subset_id=item.subset_id,
+                        mode_id=item.mode_id,
+                        image_id=item.image_id,
+                        filename=item.filename,
+                        title=item.image_id.replace("_", " ").title(),
+                        order_index=item.order_index,
+                        url=f"/images/subsets/{item.subset_id}/{item.mode_id}/{item.filename}",
+                    )
                     for item in items
                 ],
                 allow_resume=config.allow_resume,
+                current_index=current_index,
+                elapsed_ms_global=max_elapsed or 0,
+                responses=[
+                    ResponseSnapshot(
+                        order_index=record.order_index or 0,
+                        answer=record.answer,
+                        skipped=record.skipped,
+                        item_timeout=record.item_timeout,
+                        elapsed_ms_item=record.elapsed_ms_item,
+                        elapsed_ms_global=record.elapsed_ms_global,
+                        recorded_at=record.ts_client or record.ts_server,
+                    )
+                    for record in records
+                    if record.order_index is not None
+                ],
             )
 
     session_model = models.SessionModel(
@@ -663,60 +669,13 @@ def export_csv(
     def row_iter() -> Generator[str, None, None]:
         output = io.StringIO()
         writer = csv.writer(output)
-        header = [
-            "session_id",
-            "participant_id",
-            "group_id",
-            "batch_id",
-            "mode_id",
-            "stage_index",
-            "subset_id",
-            "image_id",
-            "answer",
-            "order_index",
-            "elapsed_ms_item",
-            "elapsed_ms_global",
-            "skipped",
-            "item_timeout",
-            "ts_server",
-            "ts_client",
-            "user_agent",
-            "ip_hash",
-            "started_at",
-            "finished_at",
-            "total_elapsed_ms",
-        ]
-        writer.writerow(header)
+        writer.writerow(CSV_HEADER)
         yield output.getvalue()
         output.seek(0)
         output.truncate(0)
 
         for record_model, session_model in db.execute(stmt):
-            writer.writerow(
-                [
-                    session_model.session_id,
-                    session_model.participant_id,
-                    session_model.group_id,
-                    session_model.batch_id,
-                    record_model.mode_id,
-                    record_model.stage_index,
-                    record_model.subset_id,
-                    record_model.image_id,
-                    record_model.answer,
-                    record_model.order_index,
-                    record_model.elapsed_ms_item,
-                    record_model.elapsed_ms_global,
-                    int(record_model.skipped),
-                    int(record_model.item_timeout),
-                    record_model.ts_server.isoformat() if record_model.ts_server else "",
-                    record_model.ts_client.isoformat() if record_model.ts_client else "",
-                    record_model.user_agent or "",
-                    record_model.ip_hash or "",
-                    session_model.started_at.isoformat() if session_model.started_at else "",
-                    session_model.finished_at.isoformat() if session_model.finished_at else "",
-                    session_model.total_elapsed_ms or "",
-                ]
-            )
+            writer.writerow(format_record_row(record_model, session_model))
             yield output.getvalue()
             output.seek(0)
             output.truncate(0)

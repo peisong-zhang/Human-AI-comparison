@@ -30,6 +30,7 @@ export default function TaskPage() {
     resetItemTimer,
     recordAnswer,
     shiftTimersBy,
+    pauseSession,
     globalStart,
     itemStart
   } = useSession();
@@ -47,9 +48,11 @@ export default function TaskPage() {
   const [viewportSize, setViewportSize] = useState<{ width: number; height: number }>({ width: 1024, height: 768 });
   const [showCompletionPrompt, setShowCompletionPrompt] = useState(false);
   const [instructionsOpen, setInstructionsOpen] = useState(false);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [languageMode, setLanguageMode] = useState<"en" | "zh">("en");
   const instructionPauseStartedAt = useRef<number | null>(null);
   const submittingRef = useRef(false);
+  const lastLoadedSrc = useRef<string>("");
 
   useEffect(() => {
     if (!session || !config) {
@@ -80,14 +83,7 @@ export default function TaskPage() {
 
   useEffect(() => {
     setTimeoutTriggered(false);
-    setImageNaturalSize(null);
-    setImageLoaded(false);
   }, [currentIndex, session?.items]);
-
-  useEffect(() => {
-    setImageNaturalSize(null);
-    setImageLoaded(false);
-  }, [languageMode]);
 
   const groupConfig = useMemo(() => {
     if (!config || !session) return undefined;
@@ -148,10 +144,6 @@ export default function TaskPage() {
     ? `${currentStage.stage_index}-${currentStage.mode_id}-${currentStage.ai_enabled ? "ai" : "human"}`
     : "unknown";
 
-  useEffect(() => {
-    setImageNaturalSize(null);
-    setImageLoaded(false);
-  }, [stageKey]);
 
   const incompleteItems = useMemo(() => {
     if (!session) return [];
@@ -409,6 +401,16 @@ export default function TaskPage() {
     }
   };
 
+  const handleExitSession = () => {
+    if (instructionsOpen) return;
+    setExitConfirmOpen(true);
+  };
+
+  const confirmExitSession = () => {
+    pauseSession();
+    navigate("/");
+  };
+
   const itemProgressPercent =
     itemLimitMs && itemLimitMs > 0 ? clamp((itemElapsed / itemLimitMs) * 100, 0, 100) : 0;
 
@@ -544,6 +546,18 @@ export default function TaskPage() {
     return resolveImageUrl(applyImageLanguage(currentItem.url, languageMode));
   }, [applyImageLanguage, currentItem, languageMode, resolveImageUrl]);
 
+  useEffect(() => {
+    if (!imageSrc) {
+      setImageNaturalSize(null);
+      setImageLoaded(false);
+      return;
+    }
+    if (lastLoadedSrc.current !== imageSrc) {
+      setImageNaturalSize(null);
+      setImageLoaded(false);
+    }
+  }, [imageSrc]);
+
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[95vw] flex-col gap-6 px-4 py-8 md:px-6 lg:px-8">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -641,6 +655,9 @@ export default function TaskPage() {
                 </div>
               </div>
             </div>
+            <div className="mb-2 text-xs text-amber-200/90 text-center">
+              Note: Ages &gt; 90 are recorded as 300. / 注：年龄 &gt; 90 的患者会标记为 300。
+            </div>
             <div
               className={`relative mx-auto w-full max-w-full overflow-hidden rounded-2xl border border-slate-800 bg-black ${
                 isAiMode ? "p-3" : "p-4"
@@ -665,10 +682,14 @@ export default function TaskPage() {
                         width: event.currentTarget.naturalWidth,
                         height: event.currentTarget.naturalHeight
                       });
+                      lastLoadedSrc.current = imageSrc;
                       setImageLoaded(true);
                     })()
                   }
-                  onError={() => setImageLoaded(true)}
+                  onError={() => {
+                    lastLoadedSrc.current = imageSrc;
+                    setImageLoaded(true);
+                  }}
                 />
               )}
               {!imageLoaded && (
@@ -754,6 +775,15 @@ export default function TaskPage() {
                       <span className="text-[11px] font-semibold leading-tight opacity-90">下一题</span>
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={handleExitSession}
+                    disabled={submitting || finishing || instructionsOpen}
+                    className="flex h-11 w-full flex-col items-center justify-center rounded-lg border border-slate-700/80 bg-slate-900/60 px-3 text-center text-slate-200 transition hover:border-slate-500 hover:bg-slate-900 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="text-sm font-semibold leading-tight">Exit & Pause</span>
+                    <span className="text-[11px] font-semibold leading-tight opacity-90">暂时退出并暂停</span>
+                  </button>
                   {incompleteItems.length > 0 ? (
                     <>
                       <button
@@ -802,6 +832,38 @@ export default function TaskPage() {
         <SummaryStatCard label="Completed / 已完成" value={completedCount.toString()} />
         <SummaryStatCard label="Remaining / 剩余" value={(totalItems - completedCount).toString()} />
       </div>
+      {exitConfirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div
+            className="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"
+            onClick={() => setExitConfirmOpen(false)}
+          />
+          <div className="relative w-full max-w-md rounded-2xl border border-slate-800 bg-slate-950/95 p-6 text-slate-100 shadow-[0_25px_60px_rgba(15,23,42,0.6)]">
+            <div className="text-lg font-semibold">Exit & Pause / 暂时退出</div>
+            <p className="mt-2 text-sm text-slate-300">
+              Exit now and pause the session. You can resume later with the same name and group.
+              <br />
+              现在退出并暂停标注。稍后使用相同姓名与分组可继续。
+            </p>
+            <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => setExitConfirmOpen(false)}
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-slate-500 hover:bg-slate-900"
+              >
+                Cancel / 取消
+              </button>
+              <button
+                type="button"
+                onClick={confirmExitSession}
+                className="flex-1 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-rose-500"
+              >
+                Exit & Pause / 退出并暂停
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

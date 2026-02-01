@@ -36,15 +36,9 @@ export default function LoginPage() {
   }, [form.group_id]);
 
   useEffect(() => {
-    if (!form.participant_role) {
-      setQuotaStatus(null);
-      setQuotaError(null);
-      return;
-    }
-
     let cancelled = false;
     setQuotaLoading(true);
-    fetchQuotaStatus(form.participant_role)
+    fetchQuotaStatus()
       .then((data) => {
         if (cancelled) return;
         setQuotaStatus(data);
@@ -63,17 +57,46 @@ export default function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, [form.participant_role]);
+  }, []);
 
   const quotaByGroupId = useMemo(() => {
     if (!quotaStatus) return new Map<string, QuotaStatusResponse["groups"][number]>();
     return new Map(quotaStatus.groups.map((group) => [group.group_id, group]));
   }, [quotaStatus]);
 
+  const quotaTotals = useMemo(() => {
+    if (!quotaStatus) return null;
+    let completedSum = 0;
+    let limitSum = 0;
+    let hasLimit = false;
+    quotaStatus.groups.forEach((group) => {
+      completedSum += group.completed ?? 0;
+      if (typeof group.limit === "number") {
+        limitSum += group.limit;
+        hasLimit = true;
+      }
+    });
+    return {
+      completed: completedSum,
+      limit: hasLimit ? limitSum : null
+    };
+  }, [quotaStatus]);
+
+  const isSingleGroup = (config?.groups.length ?? 0) === 1;
+
   const selectedGroup: GroupConfig | undefined = useMemo(() => {
     if (!config) return undefined;
     return config.groups.find((group) => group.group_id === form.group_id);
   }, [config, form.group_id]);
+
+  useEffect(() => {
+    if (!config || !isSingleGroup) return;
+    const onlyGroup = config.groups[0];
+    if (onlyGroup && form.group_id !== onlyGroup.group_id) {
+      setForm((prev) => ({ ...prev, group_id: onlyGroup.group_id }));
+      setGroupConfirmed(true);
+    }
+  }, [config, form.group_id, isSingleGroup]);
 
   const rolesAvailable = (config?.participant_roles?.length ?? 0) > 0;
 
@@ -118,7 +141,7 @@ export default function LoginPage() {
       setError("Selected group is full. Please choose another. / 该组名额已满，请选择其他分组。");
       return;
     }
-    if (!groupConfirmed) {
+    if (!isSingleGroup && !groupConfirmed) {
       setError("Please confirm your group before starting. / 请确认你的分组后再开始。");
       return;
     }
@@ -147,6 +170,12 @@ export default function LoginPage() {
         <h1 className="text-3xl font-semibold text-white">
           Human + AI Comparison Study / 人机对比实验
         </h1>
+        {!loadingConfig && !quotaLoading && (
+          <p className="mt-2 text-sm text-slate-300">
+            Completed participants / 已完成参与者: {quotaTotals?.completed ?? 0}
+            {quotaTotals?.limit !== null && quotaTotals ? ` / ${quotaTotals.limit}` : ""}
+          </p>
+        )}
       </header>
       <div className="grid items-start gap-8 lg:grid-cols-[1.2fr_0.8fr]">
         <main className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-xl">
@@ -211,122 +240,52 @@ export default function LoginPage() {
                   )}
                 </select>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
+              {!isSingleGroup ? (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-medium text-slate-200">
+                      Participant Group / 分组
+                    </label>
+                    {!form.group_id && (
+                      <span className="rounded-full bg-rose-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">
+                        Required / 必填
+                      </span>
+                    )}
+                  </div>
+                  <select
+                    value={form.group_id}
+                    onChange={(event) => handleChange("group_id", event.target.value)}
+                    className={`w-full rounded-lg border bg-slate-950 px-4 py-2 text-base text-slate-100 focus:outline-none ${
+                      form.group_id
+                        ? "border-slate-700 focus:border-primary"
+                        : "border-rose-500/60 ring-1 ring-rose-500/30 focus:border-rose-400"
+                    }`}
+                  >
+                    <option value="" disabled>
+                      Select a group / 请选择分组
+                    </option>
+                    {config.groups.map((group) => (
+                      <option key={group.group_id} value={group.group_id}>
+                        {group.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="space-y-2">
                   <label className="text-sm font-medium text-slate-200">
                     Participant Group / 分组
                   </label>
-                  {!form.group_id && (
-                    <span className="rounded-full bg-rose-500/90 px-2 py-0.5 text-[10px] font-semibold text-white">
-                      Required / 必填
+                  <div className="flex items-center justify-between rounded-lg border border-slate-700 bg-slate-950 px-4 py-3 text-base text-slate-100">
+                    <span>{selectedGroup?.name ?? "Default / 默认"}</span>
+                    <span className="rounded-full bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-200">
+                      Auto assigned / 自动分配
                     </span>
-                  )}
+                  </div>
                 </div>
-                <select
-                  value={form.group_id}
-                  onChange={(event) => handleChange("group_id", event.target.value)}
-                  className={`w-full rounded-lg border bg-slate-950 px-4 py-2 text-base text-slate-100 focus:outline-none ${
-                    form.group_id
-                      ? "border-slate-700 focus:border-primary"
-                      : "border-rose-500/60 ring-1 ring-rose-500/30 focus:border-rose-400"
-                  }`}
-                >
-                  <option value="" disabled>
-                    Select a group / 请选择分组
-                  </option>
-                {config.groups.map((group) => {
-                  const quota = quotaByGroupId.get(group.group_id);
-                  const remaining =
-                    typeof quota?.remaining === "number" ? ` (剩余 ${quota.remaining})` : "";
-                  const remainingEn =
-                    typeof quota?.remaining === "number" ? ` (Remaining ${quota.remaining})` : "";
-                  const isFull =
-                    typeof quota?.remaining === "number" && quota.remaining <= 0;
-                  const fullLabel = isFull ? " (Full / 已满)" : "";
-                  return (
-                    <option key={group.group_id} value={group.group_id} disabled={isFull}>
-                      {group.name}
-                      {remainingEn}
-                      {remaining}
-                      {fullLabel}
-                    </option>
-                  );
-                })}
-              </select>
-            </div>
-            {form.group_id && (() => {
-              const selectedQuota = quotaByGroupId.get(form.group_id);
-              if (
-                selectedQuota &&
-                typeof selectedQuota.remaining === "number" &&
-                selectedQuota.remaining <= 0
-              ) {
-                return (
-                  <p className="text-xs text-rose-300">
-                    Selected group is full. Please choose another. / 该组名额已满，请选择其他分组。
-                  </p>
-                );
-              }
-              return null;
-            })()}
-              {form.participant_role && (
-                <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-xs text-cyan-100">
-                  <div className="font-semibold text-cyan-100">Group quota / 分组名额</div>
-                  {quotaLoading && (
-                    <p className="mt-2 text-cyan-200/80">Loading quota... / 正在加载名额...</p>
-                  )}
-                  {quotaError && <p className="mt-2 text-rose-300">{quotaError}</p>}
-                  {!quotaLoading && !quotaError && quotaStatus && (
-                    <div className="mt-2 grid gap-2">
-                      {quotaStatus.groups.map((group) => {
-                        const remaining =
-                          typeof group.remaining === "number" ? group.remaining : "N/A";
-                        const limit = typeof group.limit === "number" ? group.limit : "N/A";
-                        const remainingValue =
-                          typeof group.remaining === "number" ? group.remaining : null;
-                        const isSelected = group.group_id === form.group_id;
-                        const remainingTone =
-                          remainingValue === null
-                            ? "slate"
-                            : remainingValue > 0
-                              ? "emerald"
-                              : "rose";
-                        const rowClasses =
-                          remainingValue === null
-                            ? "border-slate-800/70 bg-slate-950/60 text-slate-200"
-                            : remainingValue > 0
-                              ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-100"
-                              : "border-rose-500/40 bg-rose-500/10 text-rose-100";
-                        return (
-                          <div
-                            key={group.group_id}
-                            className={`flex flex-col gap-2 rounded-md border px-3 py-2 text-xs sm:flex-row sm:items-center sm:justify-between ${rowClasses} ${
-                              isSelected ? "ring-1 ring-cyan-400/60" : ""
-                            }`}
-                          >
-                            <span className="font-semibold">{group.name}</span>
-                            <div className="flex flex-wrap items-center gap-2 text-[11px]">
-                              <span
-                                className={`rounded-full px-2 py-0.5 font-semibold ${
-                                  remainingTone === "emerald"
-                                    ? "bg-emerald-500/20 text-emerald-100"
-                                    : remainingTone === "rose"
-                                      ? "bg-rose-500/20 text-rose-100"
-                                      : "bg-slate-800 text-slate-300"
-                                }`}
-                              >
-                                Remaining / 剩余: {remaining}
-                              </span>
-                              <span className="text-slate-200/80">
-                                Completed / 已完成: {group.completed} / {limit}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
+              )}
+              {false && !isSingleGroup && form.participant_role && (
+                <div />
               )}
               {selectedGroup && (
                 <div className="rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
@@ -349,7 +308,7 @@ export default function LoginPage() {
                   </ul>
                 </div>
               )}
-              {selectedGroup && (
+              {selectedGroup && !isSingleGroup && (
                 <label
                   className={`relative flex items-start gap-3 rounded-lg border px-4 py-3 text-sm transition ${
                     groupConfirmed
@@ -414,7 +373,7 @@ export default function LoginPage() {
                   !form.participant_id.trim() ||
                   !form.group_id ||
                   !form.participant_role ||
-                  !groupConfirmed ||
+                  (!isSingleGroup && !groupConfirmed) ||
                   !rolesAvailable
                 }
                 className="w-full rounded-lg bg-primary px-4 py-3 text-base font-semibold text-white transition hover:bg-primary/80 disabled:cursor-not-allowed disabled:bg-slate-700"
@@ -458,17 +417,31 @@ export default function LoginPage() {
                 </div>
               </div>
             </li>
-            <li className="rounded-lg border border-slate-800/70 bg-slate-900/60 px-4 py-3">
-              <div className="flex items-start gap-3">
-                <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-950/70 text-xs font-semibold text-slate-200">
-                  3
+            {isSingleGroup ? (
+              <li className="rounded-lg border border-slate-800/70 bg-slate-900/60 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-950/70 text-xs font-semibold text-slate-200">
+                    3
+                  </div>
+                  <div>
+                    <div>Group auto-assigned</div>
+                    <div className="text-xs text-slate-400">分组已自动分配</div>
+                  </div>
                 </div>
-                <div>
-                  <div>Choose Participant Group</div>
-                  <div className="text-xs text-slate-400">选择分组</div>
+              </li>
+            ) : (
+              <li className="rounded-lg border border-slate-800/70 bg-slate-900/60 px-4 py-3">
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-950/70 text-xs font-semibold text-slate-200">
+                    3
+                  </div>
+                  <div>
+                    <div>Choose Participant Group</div>
+                    <div className="text-xs text-slate-400">选择分组</div>
+                  </div>
                 </div>
-              </div>
-            </li>
+              </li>
+            )}
             <li className="rounded-lg border border-slate-800/70 bg-slate-900/60 px-4 py-3">
               <div className="flex items-start gap-3">
                 <div className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-full border border-slate-700 bg-slate-950/70 text-xs font-semibold text-slate-200">
@@ -487,14 +460,13 @@ export default function LoginPage() {
             </div>
             <ul className="mt-3 space-y-2 text-xs text-amber-200/90">
               <li>
-                Please enter your participant ID (name) and select your assigned role and group
-                before starting.
+                Please enter your participant name and select your role before starting.
               </li>
-              <li>After starting, the group cannot be changed.</li>
+              <li>After starting, the assignment cannot be changed.</li>
             </ul>
             <ul className="mt-2 space-y-2 text-xs text-amber-200/90">
-              <li>请在开始前填写参与者ID（姓名），并选择你的角色与分组。</li>
-              <li>开始后无法更改分组。</li>
+              <li>请在开始前填写参与者姓名，并选择你的角色。</li>
+              <li>开始后无法更改身份分配。</li>
             </ul>
           </div>
         </aside>

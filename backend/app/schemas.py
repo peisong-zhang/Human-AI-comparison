@@ -102,6 +102,19 @@ class SessionStartResponse(BaseModel):
     stages: list[StageInfo]
     items: list[SessionItem]
     allow_resume: bool
+    current_index: Optional[int] = None
+    elapsed_ms_global: Optional[int] = None
+    responses: Optional[list["ResponseSnapshot"]] = None
+
+
+class ResponseSnapshot(BaseModel):
+    order_index: int
+    answer: str
+    skipped: bool
+    item_timeout: bool
+    elapsed_ms_item: Optional[int]
+    elapsed_ms_global: Optional[int]
+    recorded_at: Optional[dt.datetime] = None
 
 
 class RecordPayload(BaseModel):

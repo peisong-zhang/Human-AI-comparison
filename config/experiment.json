@@ -1,20 +1,12 @@
 {
   "batch_id": "2025A",
   "subsets": {
-    "A": {
-      "name": "Subset A / 子集A",
-      "description": "Randomised half of the cohort / 随机分配的一半样本",
+    "All": {
+      "name": "All Cases / 全部病例",
+      "description": "Single full cohort / 全部样本",
       "image_dirs": {
-        "human": { "en": "data/cases/subset_a/human_en", "zh": "data/cases/subset_a/human_zh" },
-        "ai_assisted": { "en": "data/cases/subset_a/ai_assisted_en", "zh": "data/cases/subset_a/ai_assisted_zh"}
-      }
-    },
-    "B": {
-      "name": "Subset B / 子集B",
-      "description": "Remaining half of the cohort / 另一半样本",
-      "image_dirs": {
-        "human": { "en": "data/cases/subset_b/human_en", "zh": "data/cases/subset_b/human_zh" },
-        "ai_assisted": { "en": "data/cases/subset_b/ai_assisted_en", "zh": "data/cases/subset_b/ai_assisted_zh" }
+        "human": { "en": "data/cases/human_en", "zh": "data/cases/human_zh" },
+        "ai_assisted": { "en": "data/cases/ai_assisted_en", "zh": "data/cases/ai_assisted_zh" }
       }
     }
   },
@@ -35,39 +27,19 @@
     }
   },
   "groups": {
-    "Group1": {
-      "name": "Group 1 / 组1",
+    "Default": {
+      "name": "Default / 默认",
       "per_item_seconds": 60,
       "hard_timeout": false,
       "soft_timeout": true,
-      "role_quotas": {
-        "Senior Doctor / 高年资医生": 1,
-        "Junior Doctor / 住院医师": 1,
-        "Medical Student / 医学生": 1
-      },
       "sequence": [
-        { "subset": "A", "mode": "human", "label": "Stage 1: Subset A (No AI) / 阶段1：子集A（无AI）" },
-        { "subset": "B", "mode": "ai_assisted", "label": "Stage 2: Subset B (AI assisted) / 阶段2：子集B（AI辅助）" }
-      ]
-    },
-    "Group2": {
-      "name": "Group 2 / 组2",
-      "per_item_seconds": 60,
-      "hard_timeout": false,
-      "soft_timeout": true,
-      "role_quotas": {
-        "Senior Doctor / 高年资医生": 2,
-        "Junior Doctor / 住院医师": 2,
-        "Medical Student / 医学生": 2
-      },
-      "sequence": [
-        { "subset": "B", "mode": "ai_assisted", "label": "Stage 1: Subset B (AI assisted) / 阶段1：子集B（AI辅助）" },
-        { "subset": "A", "mode": "human", "label": "Stage 2: Subset A (No AI) / 阶段2：子集A（无AI）" }
+        { "subset": "All", "mode": "human", "label": "Stage 1: Human Only / 阶段1：仅医生" },
+        { "subset": "All", "mode": "ai_assisted", "label": "Stage 2: AI Assisted / 阶段2：AI辅助" }
       ]
     }
   },
   "default_per_item_seconds": 60,
-  "allow_resume": false,
+  "allow_resume": true,
   "participant_roles": [
     "Senior Doctor / 高年资医生",
     "Junior Doctor / 住院医师",
