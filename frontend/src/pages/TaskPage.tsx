@@ -87,12 +87,18 @@ export default function TaskPage() {
       }
     };
 
+    const handleFreeze = () => handleBackgroundExit();
+
     window.addEventListener("pagehide", handleBackgroundExit);
+    window.addEventListener("blur", handleBackgroundExit);
     document.addEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("freeze", handleFreeze);
 
     return () => {
       window.removeEventListener("pagehide", handleBackgroundExit);
+      window.removeEventListener("blur", handleBackgroundExit);
       document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener("freeze", handleFreeze);
     };
   }, [session, pauseSession, navigate]);
 
