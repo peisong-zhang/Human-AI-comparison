@@ -180,6 +180,8 @@ export default function LoginPage() {
           Use the same name and role to resume your previous progress.
           <br />
           使用相同姓名与身份可恢复之前的答题进度。
+          <br />
+          可填写中文姓名。
         </div>
       </header>
       <div className="grid items-start gap-8 lg:grid-cols-[1.2fr_0.8fr]">
