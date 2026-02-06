@@ -81,8 +81,28 @@ export default function TaskPage() {
       navigate("/");
     };
 
+    const isHidden = () => {
+      const anyDoc = document as typeof document & {
+        webkitHidden?: boolean;
+        webkitVisibilityState?: string;
+      };
+      if (typeof anyDoc.hidden === "boolean") {
+        return anyDoc.hidden;
+      }
+      if (typeof anyDoc.webkitHidden === "boolean") {
+        return anyDoc.webkitHidden;
+      }
+      if (typeof anyDoc.visibilityState === "string") {
+        return anyDoc.visibilityState === "hidden";
+      }
+      if (typeof anyDoc.webkitVisibilityState === "string") {
+        return anyDoc.webkitVisibilityState === "hidden";
+      }
+      return false;
+    };
+
     const handleVisibility = () => {
-      if (document.visibilityState === "hidden") {
+      if (isHidden()) {
         handleBackgroundExit();
       }
     };
@@ -92,12 +112,14 @@ export default function TaskPage() {
     window.addEventListener("pagehide", handleBackgroundExit);
     window.addEventListener("blur", handleBackgroundExit);
     document.addEventListener("visibilitychange", handleVisibility);
+    document.addEventListener("webkitvisibilitychange", handleVisibility as EventListener);
     document.addEventListener("freeze", handleFreeze);
 
     return () => {
       window.removeEventListener("pagehide", handleBackgroundExit);
       window.removeEventListener("blur", handleBackgroundExit);
       document.removeEventListener("visibilitychange", handleVisibility);
+      document.removeEventListener("webkitvisibilitychange", handleVisibility as EventListener);
       document.removeEventListener("freeze", handleFreeze);
     };
   }, [session, pauseSession, navigate]);

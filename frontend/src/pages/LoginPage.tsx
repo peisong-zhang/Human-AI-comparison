@@ -176,6 +176,11 @@ export default function LoginPage() {
             {quotaTotals?.limit !== null && quotaTotals ? ` / ${quotaTotals.limit}` : ""}
           </p>
         )}
+        <div className="mt-4 rounded-lg border border-amber-400/50 bg-amber-400/10 px-4 py-3 text-sm text-amber-100">
+          Use the same name and role to resume your previous progress.
+          <br />
+          使用相同姓名与身份可恢复之前的答题进度。
+        </div>
       </header>
       <div className="grid items-start gap-8 lg:grid-cols-[1.2fr_0.8fr]">
         <main className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 shadow-xl">
